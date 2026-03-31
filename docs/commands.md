@@ -26,4 +26,4 @@ Available command context helpers:
 Notes:
 
 - aliases redirect to the main command
-- commands are emitted through Brigadier for both loaders
+- commands are emitted through Brigadier for the supported loaders

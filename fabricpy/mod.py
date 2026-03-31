@@ -9,7 +9,7 @@ Usage:
         description="Bigger on the inside.",
         authors=["DJ"],
         minecraft_version="1.20.1",
-        loader="both",          # "fabric", "forge", or "both"
+        loader="both",          # "fabric", "quilt", "forge", "neoforge", "both", or "all"
     )
 
     mod.register(MyBlock)
@@ -53,7 +53,7 @@ class Mod:
             description:        Short description shown in mod list
             authors:            List of author names
             minecraft_version:  Target MC version (default: "1.20.1")
-            loader:             "fabric", "forge", or "both"
+            loader:             "fabric", "quilt", "forge", "neoforge", "both", or "all"
             package:            Java package root (default: com.generated.<mod_id>)
             website:            Optional homepage URL
             license:            License identifier (default: "MIT")
@@ -80,6 +80,10 @@ class Mod:
         self._events: list = []
         self._commands: list = []
         self._recipes: list = []
+        self._sounds: list = []
+        self._dimension_types: list = []
+        self._dimensions: list = []
+        self._structures: list = []
 
     # ------------------------------------------------------------------ #
     # Registration
@@ -148,6 +152,131 @@ class Mod:
         }
         self.add_recipe(recipe_id, data)
         return data
+
+    # ------------------------------------------------------------------ #
+    # Sound system
+    # ------------------------------------------------------------------ #
+
+    def add_sound(self, sound_id: str, sounds, subtitle: str = "", replace: bool = False):
+        """
+        Register a sound event to be emitted into assets/<modid>/sounds.json.
+
+        Args:
+            sound_id: registry-style sound id path, e.g. "machine/hum"
+            sounds: a string path, a list of string paths, a single sound dict,
+                    or a full sounds.json entry dict with a "sounds" key
+            subtitle: optional subtitle text; stored in lang and wired to sounds.json
+            replace: optional sounds.json "replace" flag
+        """
+        if not sound_id:
+            raise ValueError("sound_id is required")
+
+        if isinstance(sounds, dict) and "sounds" in sounds:
+            data = dict(sounds)
+        else:
+            raw_entries = sounds if isinstance(sounds, list) else [sounds]
+            data = {
+                "sounds": [self._normalize_sound_entry(entry) for entry in raw_entries]
+            }
+
+        if replace:
+            data["replace"] = True
+
+        if subtitle:
+            data["subtitle"] = f"subtitles.{self.mod_id}.{sound_id.replace('/', '.')}"
+
+        self._sounds.append({
+            "id": sound_id.replace("\\", "/").strip("/"),
+            "data": data,
+            "subtitle_text": subtitle,
+        })
+        return data
+
+    def _normalize_sound_entry(self, entry):
+        if isinstance(entry, str):
+            name = entry.replace("\\", "/").strip("/")
+            if ":" not in name:
+                name = f"{self.mod_id}:{name}"
+            return {"name": name}
+
+        if isinstance(entry, dict):
+            normalized = dict(entry)
+            name = normalized.get("name")
+            if isinstance(name, str) and ":" not in name:
+                clean_name = name.replace("\\", "/").strip("/")
+                normalized["name"] = f"{self.mod_id}:{clean_name}"
+            return normalized
+
+        raise TypeError("sound entries must be strings or dicts")
+
+    # ------------------------------------------------------------------ #
+    # Dimension system
+    # ------------------------------------------------------------------ #
+
+    def add_dimension_type(self, type_id: str, data: dict):
+        """
+        Register a dimension type JSON object under
+        data/<modid>/dimension_type/<type_id>.json.
+        """
+        if not type_id:
+            raise ValueError("type_id is required")
+        if not isinstance(data, dict):
+            raise TypeError("dimension type data must be a dict")
+
+        type_path = type_id.replace("\\", "/").strip("/")
+        self._dimension_types.append({
+            "id": type_path,
+            "data": data,
+        })
+        return data
+
+    def add_dimension(self, dimension_id: str, dimension_type: str, generator: Optional[dict] = None, data: Optional[dict] = None):
+        """
+        Register a dimension JSON object under
+        data/<modid>/dimension/<dimension_id>.json.
+
+        You can either pass a full `data` dict or provide `dimension_type`
+        plus `generator`.
+        """
+        if not dimension_id:
+            raise ValueError("dimension_id is required")
+
+        if data is not None:
+            if not isinstance(data, dict):
+                raise TypeError("dimension data must be a dict")
+            payload = dict(data)
+        else:
+            if not dimension_type:
+                raise ValueError("dimension_type is required when data is not provided")
+            if generator is None:
+                raise ValueError("generator is required when data is not provided")
+            payload = {
+                "type": dimension_type,
+                "generator": generator,
+            }
+
+        dim_path = dimension_id.replace("\\", "/").strip("/")
+        self._dimensions.append({
+            "id": dim_path,
+            "data": payload,
+        })
+        return payload
+
+    def add_structure(self, structure_id: str, nbt_path: str):
+        """
+        Copy an NBT structure file into
+        data/<modid>/structures/<structure_id>.nbt.
+        """
+        if not structure_id:
+            raise ValueError("structure_id is required")
+        if not nbt_path:
+            raise ValueError("nbt_path is required")
+
+        self._structures.append({
+            "id": structure_id.replace("\\", "/").strip("/"),
+            "path": nbt_path,
+        })
+        return nbt_path
 
     def shapeless_recipe(self, recipe_id: str, result: str, ingredients: list[dict], count: int = 1):
         """Register a standard shapeless crafting recipe."""
@@ -250,5 +379,7 @@ class Mod:
             f"loader={self.loader!r} mc={self.minecraft_version!r} "
             f"blocks={len(self._blocks)} items={len(self._items)} "
             f"events={len(self._events)} commands={len(self._commands)} "
-            f"recipes={len(self._recipes)}>"
+            f"recipes={len(self._recipes)} sounds={len(self._sounds)} "
+            f"dimension_types={len(self._dimension_types)} dimensions={len(self._dimensions)} "
+            f"structures={len(self._structures)}>"
         )

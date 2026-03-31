@@ -1,14 +1,14 @@
 # Models And Blockstates
 
-`fabricpy` can generate default model and blockstate JSON, and you can override those defaults from Python or from repo files.
+`fabricpy` can generate default blockstate and model JSON, and you can override those defaults from Python or from repo files.
 
-Repo source folders:
+Repo folders:
 
-- `assets/<modid>/blockstates/...`
-- `assets/<modid>/models/block/...`
-- `assets/<modid>/models/item/...`
+- blockstates: `assets/<modid>/blockstates/...`
+- block models: `assets/<modid>/models/block/...`
+- item models: `assets/<modid>/models/item/...`
 
-Block-side Python fields:
+Block Python fields:
 
 - `texture`
 - `textures`
@@ -16,17 +16,27 @@ Block-side Python fields:
 - `blockstate`
 - `item_model`
 
-Item-side Python fields:
+Item Python fields:
 
 - `texture`
 - `textures`
 - `model`
 
-Reference rules:
+Default generation behavior:
 
-- namespaced values like `"mymod:block/fancy_block"` are used as-is
-- values with `/` but no namespace are treated as `<modid>:<value>`
-- bare values are expanded to the matching default block or item path
+- a block with only `texture = "foo/bar"` gets:
+  - a default blockstate pointing to `<modid>:block/<block_id>`
+  - a default block model using `minecraft:block/cube_all`
+  - a default block item model with parent `<modid>:block/<block_id>`
+- an item with only `texture = "foo/bar"` gets:
+  - a default item model using `minecraft:item/generated`
+  - `layer0` set to `<modid>:item/foo/bar`
+
+Reference rules inside JSON:
+
+- namespaced ids like `"mymod:block/fancy_block"` are used exactly as written
+- if you are writing raw JSON yourself, always be explicit about `block/` vs `item/`
+- Python `texture = ...` is path-like input; JSON `textures` values are texture ids
 
 Example block:
 
@@ -34,6 +44,7 @@ Example block:
 @mod.register
 class FancyBlock(mc.Block):
     block_id = "fancy_block"
+    texture = "custom/fancy_block"
     blockstate = {
         "variants": {
             "": {"model": "mymod:block/fancy_block"}
@@ -42,7 +53,8 @@ class FancyBlock(mc.Block):
     model = {
         "parent": "minecraft:block/cube_all",
         "textures": {
-            "all": "mymod:block/custom/fancy_block"
+            "all": "mymod:block/custom/fancy_block",
+            "particle": "mymod:block/custom/fancy_block"
         }
     }
     item_model = {
@@ -56,6 +68,7 @@ Example item:
 @mod.register
 class Pickle(mc.Item):
     item_id = "pickle"
+    texture = "food/pickle"
     model = {
         "parent": "minecraft:item/generated",
         "textures": {
@@ -64,8 +77,19 @@ class Pickle(mc.Item):
     }
 ```
 
-Override order:
+Manual override rules:
 
 - generated defaults are written first
-- repo files are copied after generation
+- repo files under `assets/<modid>/models/...` and `assets/<modid>/blockstates/...` are copied after generation
 - repo files override generated JSON when the paths match
+
+Important particle note:
+
+- if you use a custom block model JSON, add a `particle` texture entry unless the chosen parent already handles it the way you want
+- without a valid `particle` entry, block breaking particles can appear as missing textures even if the block itself renders correctly
+
+Common mistake:
+
+- Python says `texture = "food/pickle"` and you then write a manual item model with `"layer0": "mymod:food/pickle"`
+- that is wrong for item textures
+- the correct texture id is `"mymod:item/food/pickle"`

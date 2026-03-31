@@ -44,6 +44,12 @@ Asset fields:
 - `textures`: full item model texture map override
 - `model`: full item model JSON override
 
+Asset path behavior:
+
+- `texture = "food/pickle"` resolves to `assets/<modid>/textures/item/food/pickle.png`
+- the generated default item model uses `layer0: "<modid>:item/food/pickle"`
+- if you provide a manual `model`, you are responsible for writing the correct item texture id yourself
+
 Hooks:
 
 - `@mc.on_right_click`
@@ -60,3 +66,20 @@ class Pickle(mc.Item):
 That `texture` value resolves to:
 
 - `assets/<modid>/textures/item/food/pickle.png`
+
+Equivalent generated model:
+
+```json
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "<modid>:item/food/pickle"
+  }
+}
+```
+
+Common mistake:
+
+- writing a manual item model with `"<modid>:food/pickle"`
+- item textures need the `item/` segment
+- the correct value is `"<modid>:item/food/pickle"`

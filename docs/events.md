@@ -54,6 +54,15 @@ def on_chat(ctx):
         ctx.player.send_message("Pickle detected")
 ```
 
+Example inventory and effects:
+
+```python
+@mod.event("player_join")
+def on_join(ctx):
+    ctx.player.add_effect("minecraft:speed", 15, 1)
+    ctx.player.remove_item("minecraft:dirt", 8)
+```
+
 Example block break event:
 
 ```python

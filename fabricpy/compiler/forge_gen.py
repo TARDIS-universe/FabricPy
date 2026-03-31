@@ -47,8 +47,6 @@ def _resource_ref(mod_id: str, ref: str, folder: str, default_id: str) -> str:
     if ref:
         if ":" in ref:
             return ref
-        if "/" in ref:
-            return f"{mod_id}:{ref}"
         return f"{mod_id}:{folder}/{ref}"
     return f"{mod_id}:{folder}/{default_id}"
 
@@ -418,6 +416,13 @@ def _write_events(mod, java_root: Path, pkg: str, transpiler: JavaTranspiler):
     imports.add("import net.minecraft.world.entity.player.Player;")
     imports.add("import net.minecraft.network.chat.Component;")
     imports.add("import net.minecraft.server.level.ServerPlayer;")
+    imports.add("import net.minecraft.world.effect.MobEffectInstance;")
+    imports.add("import net.minecraft.resources.ResourceLocation;")
+    imports.add("import net.minecraft.sounds.SoundSource;")
+    imports.add("import net.minecraft.server.level.ServerLevel;")
+    imports.add("import net.minecraft.world.level.Level;")
+    imports.add("import net.minecraft.core.BlockPos;")
+    imports.add("import net.minecraftforge.registries.ForgeRegistries;")
 
     method_blocks = []
 
@@ -513,11 +518,25 @@ def _write_resources(mod, res_root: Path):
     meta_dir = res_root / "META-INF"
     meta_dir.mkdir(parents=True, exist_ok=True)
 
+    meta_by_version = {
+        "1.20.1": {
+            "loader_version": "[47,)",
+            "forge_dep": "[47,)",
+            "pack_format": 15,
+        },
+        "1.21.1": {
+            "loader_version": "[52,)",
+            "forge_dep": "[52,)",
+            "pack_format": 34,
+        },
+    }
+    meta = meta_by_version.get(mod.minecraft_version, meta_by_version["1.20.1"])
+
     deps = f"""
 [[dependencies.{mod.mod_id}]]
     modId="forge"
     mandatory=true
-    versionRange="[47,)"
+    versionRange="{meta["forge_dep"]}"
     ordering="NONE"
     side="BOTH"
 
@@ -531,7 +550,7 @@ def _write_resources(mod, res_root: Path):
 
     mods_toml = f"""\
 modLoader="javafml"
-loaderVersion="[47,)"
+loaderVersion="{meta["loader_version"]}"
 license="{mod.license}"
 
 [[mods]]
@@ -545,7 +564,7 @@ description="{mod.description}"
 
     # pack.mcmeta
     _write_text(res_root / "pack.mcmeta", json.dumps({
-        "pack": {"pack_format": 15, "description": f"{mod.name} resources"}
+        "pack": {"pack_format": meta["pack_format"], "description": f"{mod.name} resources"}
     }, indent=2))
 
     # lang
@@ -554,6 +573,10 @@ description="{mod.description}"
         lang[f"block.{mod.mod_id}.{b.block_id}"] = b.get_display_name()
     for it in mod._items:
         lang[f"item.{mod.mod_id}.{it.item_id}"] = it.get_display_name()
+    for sound in mod._sounds:
+        if sound.get("subtitle_text"):
+            key = f"subtitles.{mod.mod_id}.{sound['id'].replace('/', '.')}"
+            lang[key] = sound["subtitle_text"]
     lang_dir = res_root / "assets" / mod.mod_id / "lang"
     lang_dir.mkdir(parents=True, exist_ok=True)
     _write_text(lang_dir / "en_us.json", json.dumps(lang, indent=2))
@@ -612,6 +635,37 @@ description="{mod.description}"
         recipe_path.parent.mkdir(parents=True, exist_ok=True)
         _write_text(recipe_path, json.dumps(recipe["data"], indent=2))
 
+    dimension_types_dir = res_root / "data" / mod.mod_id / "dimension_type"
+    dimension_types_dir.mkdir(parents=True, exist_ok=True)
+    for dimension_type in mod._dimension_types:
+        type_path = dimension_types_dir / f"{dimension_type['id']}.json"
+        type_path.parent.mkdir(parents=True, exist_ok=True)
+        _write_text(type_path, json.dumps(dimension_type["data"], indent=2))
+
+    dimensions_dir = res_root / "data" / mod.mod_id / "dimension"
+    dimensions_dir.mkdir(parents=True, exist_ok=True)
+    for dimension in mod._dimensions:
+        dimension_path = dimensions_dir / f"{dimension['id']}.json"
+        dimension_path.parent.mkdir(parents=True, exist_ok=True)
+        _write_text(dimension_path, json.dumps(dimension["data"], indent=2))
+
+    structures_dir = res_root / "data" / mod.mod_id / "structures"
+    structures_dir.mkdir(parents=True, exist_ok=True)
+    for structure in mod._structures:
+        structure_path = structures_dir / f"{structure['id']}.nbt"
+        structure_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(Path(structure["path"]), structure_path)
+
+    if mod._sounds:
+        sounds_json = {
+            sound["id"]: sound["data"]
+            for sound in mod._sounds
+        }
+        _write_text(
+            res_root / "assets" / mod.mod_id / "sounds.json",
+            json.dumps(sounds_json, indent=2),
+        )
+
     project_root = Path.cwd()
     _copy_tree_if_exists(project_root / "assets" / mod.mod_id, res_root / "assets" / mod.mod_id)
     _copy_tree_if_exists(project_root / "data" / mod.mod_id, res_root / "data" / mod.mod_id)
@@ -619,21 +673,104 @@ description="{mod.description}"
 
 def _write_gradle_files(mod, project_dir: Path):
     mc = mod.minecraft_version
-    forge_version_map = {
-        "1.20.1": "47.2.20",
-        "1.20.4": "49.0.19",
+    version_map = {
+        "1.20.1": {
+            "forge": "47.4.18",
+            "java": 17,
+            "plugin": "6.0.51",
+            "settings_plugin": "0.8.0",
+        },
+        "1.21.1": {
+            "forge": "52.1.14",
+            "java": 21,
+            "plugin": "[7.0.3,8)",
+            "settings_plugin": "1.0.0",
+        },
     }
-    forge_ver = forge_version_map.get(mc, "47.2.20")
-    main_class = to_pascal(mod.mod_id)
+    if mc not in version_map:
+        raise ValueError(f"Forge does not support minecraft_version={mc!r} in this generator.")
+    v = version_map[mc]
 
-    build_gradle = f"""\
+    if mc == "1.21.1":
+        build_gradle = f"""\
+plugins {{
+    id 'java'
+    id 'idea'
+    id 'eclipse'
+    id 'net.minecraftforge.gradle' version '{v["plugin"]}'
+}}
+
+version = "{mod.version}"
+group = "{mod.package}"
+
+java.toolchain.languageVersion = JavaLanguageVersion.of({v['java']})
+
+sourceSets.main.resources {{ srcDir 'src/generated/resources' }}
+
+minecraft {{
+    mappings channel: 'official', version: '{mc}'
+
+    runs {{
+        configureEach {{
+            workingDir = layout.projectDirectory.dir('run')
+            systemProperty 'forge.enabledGameTestNamespaces', '{mod.mod_id}'
+        }}
+
+        register('client')
+
+        register('server') {{
+            args '--nogui'
+        }}
+
+        register('gameTestServer')
+
+        register('data') {{
+            workingDir = layout.projectDirectory.dir('run-data')
+            args '--mod', '{mod.mod_id}', '--all', '--output', layout.projectDirectory.dir('src/generated/resources'), '--existing', layout.projectDirectory.dir('src/main/resources')
+        }}
+    }}
+}}
+
+repositories {{
+    minecraft.mavenizer(it)
+    maven fg.forgeMaven
+    maven fg.minecraftLibsMaven
+    mavenCentral()
+}}
+
+dependencies {{
+    implementation minecraft.dependency('net.minecraftforge:forge:{mc}-{v["forge"]}')
+}}
+
+tasks.withType(JavaCompile).configureEach {{
+    options.encoding = 'UTF-8'
+}}
+"""
+        settings_gradle = f"""\
+plugins {{
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '{v["settings_plugin"]}'
+}}
+
+rootProject.name = "{mod.mod_id}-forge"
+"""
+        gradle_properties = (
+            "org.gradle.caching=true\n"
+            "org.gradle.parallel=true\n"
+            "org.gradle.configureondemand=true\n\n"
+            "org.gradle.configuration-cache=true\n"
+            "org.gradle.configuration-cache.parallel=true\n"
+            "org.gradle.configuration-cache.problems=warn\n\n"
+            "net.minecraftforge.gradle.merge-source-sets=true\n"
+        )
+    else:
+        build_gradle = f"""\
 buildscript {{
     repositories {{
         maven {{ url = 'https://maven.minecraftforge.net' }}
         mavenCentral()
     }}
     dependencies {{
-        classpath 'net.minecraftforge.gradle:ForgeGradle:6.0.+'
+        classpath 'net.minecraftforge.gradle:ForgeGradle:{v["plugin"]}'
     }}
 }}
 
@@ -644,7 +781,7 @@ version = "{mod.version}"
 group = "{mod.package}"
 
 java {{
-    toolchain.languageVersion = JavaLanguageVersion.of(17)
+    toolchain.languageVersion = JavaLanguageVersion.of({v['java']})
 }}
 
 minecraft {{
@@ -677,7 +814,7 @@ repositories {{
 }}
 
 dependencies {{
-    minecraft 'net.minecraftforge:forge:{mc}-{forge_ver}'
+    minecraft 'net.minecraftforge:forge:{mc}-{v["forge"]}'
 }}
 
 jar {{
@@ -693,8 +830,10 @@ jar {{
     }}
 }}
 """
-    _write_text(project_dir / "build.gradle", build_gradle)
+        settings_gradle = f'rootProject.name = "{mod.mod_id}-forge"\n'
+        gradle_properties = "org.gradle.jvmargs=-Xmx2G\n"
 
-    _write_text(project_dir / "settings.gradle", f'rootProject.name = "{mod.mod_id}-forge"\n')
-    _write_text(project_dir / "gradle.properties", "org.gradle.jvmargs=-Xmx2G\n")
+    _write_text(project_dir / "build.gradle", build_gradle)
+    _write_text(project_dir / "settings.gradle", settings_gradle)
+    _write_text(project_dir / "gradle.properties", gradle_properties)
     _write_text(project_dir / ".gitignore", ".gradle/\nbuild/\nrun/\n*.jar\n")

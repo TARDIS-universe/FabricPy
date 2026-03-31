@@ -48,6 +48,13 @@ Asset fields:
 - `blockstate`: full blockstate JSON override
 - `item_model`: full inventory item model JSON override for the block item
 
+Asset path behavior:
+
+- `texture = "decor/lamp"` resolves to `assets/<modid>/textures/block/decor/lamp.png`
+- the generated default block model uses that as `<modid>:block/decor/lamp`
+- the generated default block item model points back to the block model
+- if you provide a manual `model`, you are responsible for the texture ids inside it
+
 Hooks:
 
 - `@mc.on_use`
@@ -71,3 +78,20 @@ That `texture` value resolves to:
 - `assets/<modid>/textures/block/decor/lamp.png`
 
 If you provide `model`, `blockstate`, or `item_model` manually, those values are emitted as JSON. Repo files under `assets/<modid>/blockstates` and `assets/<modid>/models` override generated defaults.
+
+Particle note:
+
+- if your block uses a manual model JSON, add a `particle` texture entry
+- example:
+
+```json
+{
+  "parent": "minecraft:block/cube_all",
+  "textures": {
+    "all": "mymod:block/decor/lamp",
+    "particle": "mymod:block/decor/lamp"
+  }
+}
+```
+
+- missing `particle` is the most common reason a block looks correct in-world but breaks with missing-texture particles

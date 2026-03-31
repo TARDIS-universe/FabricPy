@@ -9,6 +9,7 @@ Player helpers:
 - `ctx.player.send_action_bar(text)`
 - `ctx.player.teleport(x, y, z)`
 - `ctx.player.give_item(item_id, count)`
+- `ctx.player.remove_item(item_id, count)`
 - `ctx.player.get_health()`
 - `ctx.player.set_health(value)`
 - `ctx.player.is_creative()`
@@ -19,6 +20,15 @@ Player helpers:
 - `ctx.player.heal(amount)`
 - `ctx.player.damage(amount)`
 - `ctx.player.add_effect(effect, seconds, amplifier)`
+- `ctx.player.remove_effect(effect)`
+- `ctx.player.clear_effects()`
+- `ctx.player.get_hunger()`
+- `ctx.player.set_hunger(value)`
+- `ctx.player.get_saturation()`
+- `ctx.player.set_saturation(value)`
+- `ctx.player.add_experience(amount)`
+- `ctx.player.kill()`
+- `ctx.player.teleport_dimension(dimension_id, x, y, z)`
 - `ctx.player.get_pos_x()`
 - `ctx.player.get_pos_y()`
 - `ctx.player.get_pos_z()`
@@ -30,6 +40,10 @@ World helpers:
 - `ctx.world.play_sound(sound_id, volume, pitch)`
 - `ctx.world.explode(x, y, z, power)`
 - `ctx.world.set_block(x, y, z, block_id)`
+- `ctx.world.set_block_in_dimension(dimension_id, x, y, z, block_id)`
+- `ctx.world.fill_in_dimension(dimension_id, x1, y1, z1, x2, y2, z2, block_id, mode)`
+- `ctx.world.place_structure(dimension_id, structure_id, x, y, z)`
+- `ctx.world.place_nbt(dimension_id, structure_id, x, y, z)`
 - `ctx.world.get_time()`
 - `ctx.world.is_day()`
 - `ctx.world.is_raining()`
@@ -42,6 +56,13 @@ Command source helpers:
 - `ctx.source.send_message(text)`
 - `ctx.source.get_player()`
 - `ctx.source.get_pos()`
+- `ctx.source.run_command(command)`
+
+Server helpers:
+
+- `ctx.server`
+- `ctx.server.run_command(command)`
+- `ctx.server.reload_data()`
 
 Raw context values that can appear depending on the hook or event:
 
@@ -57,3 +78,7 @@ Notes:
 - availability depends on the specific hook or event
 - `ctx.message` is primarily for chat events
 - `ctx.server` is primarily for server lifecycle and tick events
+- item ids should be full ids like `"minecraft:stone"` or `"mymod:pickle"`
+- effect ids should be strings like `"minecraft:speed"` or `"speed"`
+- dimension ids should be full ids like `"minecraft:overworld"` or `"mymod:pocket"`
+- cross-dimension block and structure helpers use Minecraft commands under the hood

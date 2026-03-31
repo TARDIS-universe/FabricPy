@@ -5,6 +5,9 @@
 - [blocks.md](./blocks.md)
 - [items.md](./items.md)
 - [recipes.md](./recipes.md)
+- [sounds.md](./sounds.md)
+- [dimensions.md](./dimensions.md)
+- [structures.md](./structures.md)
 - [textures.md](./textures.md)
 - [models.md](./models.md)
 - [events.md](./events.md)
@@ -20,4 +23,4 @@ Project source assets and data live in:
 - `assets/<modid>/...`
 - `data/<modid>/...`
 
-Those folders are copied into both generated loader projects during compile. Files from the repo override generated defaults when paths collide.
+Those folders are copied into generated loader projects during compile. Files from the repo override generated defaults when paths collide.
