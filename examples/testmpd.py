@@ -63,7 +63,10 @@ class block(mc.Block):
         "parent": "test:block/block"
     }
 
-
+@mod.command("test", permission_level=0)
+def test(ctx):
+    player = ctx.source.get_player()
+    ctx.source.send_message(f"{player}")
 
 mod.register(pickle)
 mod.register(block)

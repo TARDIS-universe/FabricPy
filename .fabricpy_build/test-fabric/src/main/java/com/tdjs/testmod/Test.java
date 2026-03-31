@@ -1,6 +1,7 @@
 package com.tdjs.testmod;
 
 import com.tdjs.testmod.event.ModEvents;
+import com.tdjs.testmod.command.ModCommands;
 import net.fabricmc.api.ModInitializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,5 +19,6 @@ public class Test implements ModInitializer {
         ModBlocks.register();
         ModItems.register();
         ModEvents.register();
+        ModCommands.register();
     }
 }

@@ -1,1 +1,4 @@
 /.fabricpy_build
+/.fabricpy_build
+*.java
+/.fabricpy_build/test-forge

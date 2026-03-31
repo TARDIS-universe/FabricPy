@@ -1,5 +1,6 @@
 package com.tdjs.testmod;
 
+import com.tdjs.testmod.command.ModCommands;
 import com.tdjs.testmod.event.ModEvents;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
@@ -26,7 +27,7 @@ public class Test {
         bus.addListener(ModItems::addCreative);
 
         // Register command events on Forge's main bus
-        // No commands
+        net.minecraftforge.common.MinecraftForge.EVENT_BUS.register(ModCommands.class);
         net.minecraftforge.common.MinecraftForge.EVENT_BUS.register(ModEvents.class);
     }
 }
