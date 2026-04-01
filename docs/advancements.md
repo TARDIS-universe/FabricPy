@@ -46,6 +46,28 @@ mod.add_advancement(
 )
 ```
 
+Goal and challenge examples:
+
+```python
+mod.add_advancement(
+    advancement_id="story/power_on",
+    title="System Online",
+    description="Restore power to the facility.",
+    icon_item="minecraft:redstone",
+    parent="playtime:story/root",
+    frame="goal",
+)
+
+mod.add_advancement(
+    advancement_id="story/master_operator",
+    title="Master Operator",
+    description="Unlock every scanner door.",
+    icon_item="playtime:hand_scanner",
+    parent="playtime:story/power_on",
+    frame="challenge",
+)
+```
+
 ## Item-based advancement
 
 Use `mod.item_advancement(...)` when the trigger should be "player has this item in inventory".

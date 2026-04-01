@@ -54,6 +54,29 @@ mod.shapeless_recipe(
 )
 ```
 
+Smelting-style raw recipe example:
+
+```python
+mod.add_recipe("steel_ingot_from_smelting", {
+    "type": "minecraft:smelting",
+    "ingredient": {"item": "mymod:raw_steel"},
+    "result": "mymod:steel_ingot",
+    "experience": 0.7,
+    "cookingtime": 200
+})
+```
+
+Stonecutter example:
+
+```python
+mod.add_recipe("steel_tiles_from_cutting", {
+    "type": "minecraft:stonecutting",
+    "ingredient": {"item": "mymod:steel_block"},
+    "result": "mymod:steel_tiles",
+    "count": 4
+})
+```
+
 Repo data files:
 
 - `data/<modid>/recipes/...`

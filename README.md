@@ -57,6 +57,36 @@ The Python ctx surface now also includes:
 - more per-hook item helpers on `ctx.stack`
 - more global events such as `player_tick`, `player_use_item`, `player_use_block`, `player_attack_entity`, `player_interact_entity`, and `entity_death`
 
+Quick example:
+
+```python
+import fabricpy as mc
+
+mod = mc.Mod(
+    mod_id="examplemod",
+    name="Example Mod",
+    minecraft_version="1.20.1",
+    loader="both",
+)
+
+@mod.register
+class ExampleItem(mc.Item):
+    item_id = "example_item"
+    texture = "tools/example_item"
+
+@mod.register
+class ExampleBlock(mc.Block):
+    block_id = "example_block"
+    texture = "machines/example_block"
+
+@mod.event("player_join")
+def on_join(ctx):
+    ctx.player.send_message("Welcome")
+
+if __name__ == "__main__":
+    mod.compile()
+```
+
 Runtime appearance note:
 
 - block data can drive logic and remember choices

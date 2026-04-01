@@ -67,3 +67,11 @@ Override behavior:
 Playing sounds:
 
 - use `ctx.world.play_sound("mymod:machine/hum", volume, pitch)` from hooks or events
+
+Hook example:
+
+```python
+@mod.event("player_use_block")
+def on_use(ctx):
+    ctx.world.play_sound("mymod:machine/hum", 1.0, 1.0)
+```

@@ -44,6 +44,17 @@ tools_tab.set_title("Playtime Equipment")
 tools_tab.set_icon("playtime:advanced_scanner")
 ```
 
+Multiple tabs example:
+
+```python
+tools_tab = mod.creative_tab("tools", "Tools", "playtime:hand_scanner")
+tools_tab.item.add("playtime:hand_scanner")
+tools_tab.item.add("playtime:grabpack_cannon")
+
+blocks_tab = mod.creative_tab("blocks", "Blocks", "playtime:hand_scanner")
+blocks_tab.item.add("playtime:hand_scanner")
+```
+
 ## Generated language key
 
 `fabricpy` writes the tab title into:

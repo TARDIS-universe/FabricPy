@@ -30,6 +30,24 @@ def on_join(ctx):
     ctx.player.send_message("Welcome")
 ```
 
+Multiple common event examples:
+
+```python
+@mod.event("player_leave")
+def on_leave(ctx):
+    ctx.server.run_command("say A player left")
+
+
+@mod.event("server_start")
+def on_start(ctx):
+    ctx.server.run_command("say Server started")
+
+
+@mod.event("server_tick")
+def on_server_tick(ctx):
+    pass
+```
+
 Common context values:
 
 - `ctx.player`
@@ -102,6 +120,33 @@ Example use-item event:
 def on_item(ctx):
     if ctx.stack.is_of("minecraft:stick"):
         ctx.player.send_action_bar("Using a stick")
+```
+
+Example use-block event:
+
+```python
+@mod.event("player_use_block")
+def on_block(ctx):
+    if ctx.world.get_self_block_id() == "minecraft:chest":
+        ctx.player.send_message("That is a chest")
+```
+
+Example player tick event:
+
+```python
+@mod.event("player_tick")
+def on_tick(ctx):
+    if ctx.player.get_health() < 6:
+        ctx.player.send_action_bar("Low health")
+```
+
+Example block break event with drops logic:
+
+```python
+@mod.event("block_break")
+def on_break(ctx):
+    if ctx.world.get_self_block_id() == "minecraft:diamond_ore":
+        ctx.player.add_experience(5)
 ```
 
 Example entity interaction event:

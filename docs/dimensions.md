@@ -50,6 +50,14 @@ mod.add_dimension(
 )
 ```
 
+Teleport example:
+
+```python
+@mod.event("player_join")
+def on_join(ctx):
+    ctx.player.teleport_dimension("mymod:pocket", 0, 80, 0)
+```
+
 Advanced mode:
 
 - pass `data={...}` to `mod.add_dimension(...)` if you want to provide the full dimension JSON yourself

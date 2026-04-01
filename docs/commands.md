@@ -16,6 +16,14 @@ def ping(ctx):
     ctx.source.send_message("pong")
 ```
 
+Teleport command example:
+
+```python
+@mod.command("lobby", permission_level=0)
+def lobby(ctx):
+    ctx.source.run_command("tp @s 0 80 0")
+```
+
 Available command context helpers:
 
 - `ctx.source`

@@ -42,6 +42,15 @@ Player helpers:
 - `ctx.player.count_item(item_id)`
 - `ctx.player.add_cooldown(item_id, ticks)`
 
+Player example:
+
+```python
+def reward_player(ctx):
+    ctx.player.give_item("minecraft:emerald", 3)
+    ctx.player.add_effect("minecraft:speed", 10, 1)
+    ctx.player.add_experience(5)
+```
+
 World helpers:
 
 - `ctx.world`
@@ -66,6 +75,14 @@ World helpers:
 - `ctx.world.is_raining()`
 - `ctx.world.get_dimension()`
 - `ctx.world.spawn_lightning()`
+
+World example:
+
+```python
+def do_world_action(ctx):
+    ctx.world.set_block(0, 64, 0, "minecraft:gold_block")
+    ctx.world.play_sound("minecraft:block.note_block.pling", 1.0, 1.0)
+```
 
 Command source helpers:
 
@@ -101,6 +118,16 @@ Raw context values that can appear depending on the hook or event:
 - `ctx.block_entity`
 - `ctx.server`
 
+Stack example:
+
+```python
+def handle_stack(ctx):
+    if ctx.stack.is_of("minecraft:red_dye"):
+        ctx.stack.decrement(1)
+        ctx.stack.texture_change("playtime:item/tools/painter_red")
+        ctx.stack.model_change("playtime:item/tools/painter_red")
+```
+
 Entity helpers:
 
 - `ctx.entity`
@@ -131,6 +158,18 @@ Block entity helpers:
 - `ctx.block_entity.has(key)`
 - `ctx.block_entity.remove(key)`
 - `ctx.block_entity.sync()`
+
+Block entity example:
+
+```python
+def update_panel(ctx):
+    uses = ctx.block_entity.get_int("uses")
+    ctx.block_entity.set_int("uses", uses + 1)
+    ctx.block_entity.set_string("mode", "armed")
+    ctx.block_entity.texture_change("playtime:block/panel_armed")
+    ctx.block_entity.model_change("playtime:block/panel_armed")
+    ctx.block_entity.sync()
+```
 
 Notes:
 
@@ -180,4 +219,13 @@ class Scanner(mc.Block):
             ctx.block_entity.texture_change("playtime:block/scanner_red")
             ctx.block_entity.model_change("playtime:block/scanner_red")
             ctx.block_entity.sync()
+```
+
+Cross-dimension example:
+
+```python
+@mod.event("player_join")
+def on_join(ctx):
+    ctx.world.set_block_in_dimension("minecraft:overworld", 0, 64, 0, "minecraft:stone")
+    ctx.player.teleport_dimension("minecraft:overworld", 0, 80, 0)
 ```

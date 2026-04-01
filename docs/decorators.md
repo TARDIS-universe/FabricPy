@@ -39,3 +39,28 @@ class Bell(mc.Block):
     def on_use(self, ctx):
         ctx.player.send_message("dong")
 ```
+
+Item hook example:
+
+```python
+@mod.register
+class BeaconWand(mc.Item):
+    item_id = "beacon_wand"
+
+    @mc.on_right_click
+    def on_right_click(self, ctx):
+        ctx.player.send_action_bar("wand used")
+```
+
+Entity tick example:
+
+```python
+@mod.register
+class Sentinel(mc.Entity):
+    entity_id = "sentinel"
+
+    @mc.on_tick
+    def on_tick(self, ctx):
+        if ctx.entity.get_pos_y() < 0:
+            ctx.entity.discard()
+```

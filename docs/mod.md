@@ -75,6 +75,54 @@ mod = mc.Mod(
 )
 ```
 
+Full starter example:
+
+```python
+import fabricpy as mc
+
+mod = mc.Mod(
+    mod_id="examplemod",
+    name="Example Mod",
+    version="1.0.0",
+    description="Example content pack",
+    authors=["You"],
+    minecraft_version="1.20.1",
+    loader="both",
+)
+
+
+@mod.register
+class ExampleItem(mc.Item):
+    item_id = "example_item"
+    display_name = "Example Item"
+    texture = "tools/example_item"
+
+
+@mod.register
+class ExampleBlock(mc.Block):
+    block_id = "example_block"
+    display_name = "Example Block"
+    texture = "machines/example_block"
+    hardness = 2.0
+    resistance = 4.0
+
+
+@mod.event("player_join")
+def on_join(ctx):
+    ctx.player.send_message("Example Mod loaded")
+
+
+mod.shapeless_recipe(
+    "example_item",
+    result="examplemod:example_item",
+    ingredients=[{"item": "minecraft:iron_ingot"}],
+)
+
+
+if __name__ == "__main__":
+    mod.compile()
+```
+
 Advancement example:
 
 ```python
@@ -98,6 +146,37 @@ tools_tab = mod.creative_tab(
 
 tools_tab.item.add("playtime:hand_scanner")
 tools_tab.item.add("minecraft:redstone")
+```
+
+Sound example:
+
+```python
+mod.add_sound(
+    "machines/alarm",
+    "machines/alarm",
+    subtitle="Alarm sounding",
+)
+```
+
+Dimension example:
+
+```python
+mod.add_dimension_type("pocket", {
+    "ultrawarm": False,
+    "natural": False,
+    "coordinate_scale": 1.0,
+    "has_skylight": False,
+    "has_ceiling": True,
+    "ambient_light": 0.0,
+    "fixed_time": 18000,
+    "bed_works": True,
+    "respawn_anchor_works": False,
+    "min_y": 0,
+    "height": 256,
+    "logical_height": 256,
+    "infiniburn": "#minecraft:infiniburn_overworld",
+    "effects": "minecraft:overworld",
+})
 ```
 
 Generated project layout:

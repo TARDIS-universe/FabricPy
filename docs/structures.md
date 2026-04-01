@@ -16,6 +16,14 @@ Example:
 mod.add_structure("rooms/test_room", "assets_src/test_room.nbt")
 ```
 
+Place on command example:
+
+```python
+@mod.command("spawn_room")
+def spawn_room(ctx):
+    ctx.source.run_command("execute in mymod:pocket run place template mymod:rooms/test_room 0 64 0")
+```
+
 That creates:
 
 - `data/<modid>/structures/rooms/test_room.nbt`

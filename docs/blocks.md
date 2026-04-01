@@ -78,6 +78,102 @@ Asset fields:
 - `blockstate`: full blockstate JSON override
 - `item_model`: full inventory item model JSON override for the block item
 
+Minimal cube block:
+
+```python
+@mod.register
+class SteelBlock(mc.Block):
+    block_id = "steel_block"
+    display_name = "Steel Block"
+    texture = "storage/steel_block"
+```
+
+Interactive block:
+
+```python
+@mod.register
+class AlarmPanel(mc.Block):
+    block_id = "alarm_panel"
+    display_name = "Alarm Panel"
+    texture = "machines/alarm_panel"
+    hardness = 3.0
+    resistance = 5.0
+    opaque = False
+
+    @mc.on_use
+    def on_use(self, ctx):
+        if not ctx.world.is_client():
+            ctx.player.send_message("Panel used")
+            ctx.world.play_sound("playtime:machines/alarm", 1.0, 1.0)
+```
+
+Block with persistent data:
+
+```python
+@mod.register
+class DyeablePanel(mc.Block):
+    block_id = "dyeable_panel"
+    display_name = "Dyeable Panel"
+    texture = "machines/panel_gray"
+    uses_block_data = True
+
+    @mc.on_use
+    def on_use(self, ctx):
+        if ctx.stack.is_of("minecraft:red_dye"):
+            ctx.block_entity.set_string("color", "red")
+            ctx.block_entity.texture_change("playtime:block/machines/panel_red")
+            ctx.block_entity.model_change("playtime:block/dyeable_panel_red")
+            ctx.block_entity.sync()
+            ctx.stack.decrement(1)
+```
+
+Wall-rotated model block:
+
+```python
+@mod.register
+class HandScanner(mc.Block):
+    block_id = "hand_scanner"
+    display_name = "Hand Scanner"
+    opaque = False
+    variable_rotation = True
+    rotation_mode = "wall"
+    model_collision = True
+    model = {
+        "parent": "playtime:block/hand_scanner"
+    }
+    item_model = {
+        "parent": "playtime:block/hand_scanner"
+    }
+```
+
+Floor-rotated model block:
+
+```python
+@mod.register
+class FloorButton(mc.Block):
+    block_id = "floor_button"
+    display_name = "Floor Button"
+    opaque = False
+    variable_rotation = True
+    rotation_mode = "floor"
+    model = {
+        "parent": "playtime:block/floor_button"
+    }
+```
+
+Emissive block example:
+
+```python
+@mod.register
+class ReactorLamp(mc.Block):
+    block_id = "reactor_lamp"
+    display_name = "Reactor Lamp"
+    texture = "machines/reactor_lamp"
+    emissive_texture = "machines/reactor_lamp_em"
+    emissive_level = 191
+    opaque = False
+```
+
 Rotation and model-shape fields:
 
 - `variable_rotation = True` tells `fabricpy` to generate a horizontal `facing` blockstate automatically
