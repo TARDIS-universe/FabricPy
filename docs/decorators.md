@@ -14,11 +14,15 @@ Block hook decorators:
 - `@mc.on_use`: block right click
 - `@mc.on_place`: block placement hook
 - `@mc.on_break`: block break hook
-- `@mc.on_tick`: per-tick block hook, intended for advanced cases
+- `@mc.on_tick`: per-tick block hook when the block has a generated block entity
 
 Item hook decorators:
 
 - `@mc.on_right_click`: item use hook
+
+Entity hook decorators:
+
+- `@mc.on_tick`: normal entity tick hook when used on an `mc.Entity` subclass
 
 Mixin decorator:
 

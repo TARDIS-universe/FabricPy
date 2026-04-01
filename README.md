@@ -13,6 +13,7 @@ Docs:
 - `docs/mod.md`
 - `docs/blocks.md`
 - `docs/items.md`
+- `docs/entities.md`
 - `docs/recipes.md`
 - `docs/sounds.md`
 - `docs/dimensions.md`
@@ -36,6 +37,13 @@ Supported matrix:
 
 - `1.20.1`: Fabric, Quilt, Forge
 - `1.21.1`: Fabric, Quilt, Forge, NeoForge
+
+Content support now includes:
+
+- blocks
+- items
+- block entities through `has_block_entity=True` and `@mc.on_tick`
+- normal entities through `mc.Entity`
 
 JDK selection is version-aware:
 

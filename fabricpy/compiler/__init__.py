@@ -41,6 +41,7 @@ def compile_mod(mod: "Mod", output_dir: str = "./dist", clean: bool = False):
     print(f"[fabricpy] Compiling {mod.name!r} v{mod.version} -> {loaders}")
     print(f"  Blocks:   {len(mod._blocks)}")
     print(f"  Items:    {len(mod._items)}")
+    print(f"  Entities: {len(mod._entities)}")
     print(f"  Events:   {len(mod._events)}")
     print(f"  Commands: {len(mod._commands)}")
     print(f"  Mixins:   {len(mod._mixins)}")
@@ -142,6 +143,9 @@ def _validate(mod: "Mod"):
     for item in mod._items:
         if not item.item_id:
             errors.append(f"{item.__name__} is missing item_id")
+    for entity in mod._entities:
+        if not entity.entity_id:
+            errors.append(f"{entity.__name__} is missing entity_id")
     for mx in mod._mixins:
         if not mx.target_class:
             errors.append(f"{mx.__name__} is missing target_class")

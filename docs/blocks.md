@@ -40,6 +40,12 @@ Behavior and properties:
 - `opaque`
 - `collidable`
 
+`has_block_entity` controls generated block-entity support:
+
+- set it to `True` when the block needs persistent ticking behavior
+- `@mc.on_tick` on a block will also force block-entity generation even if you forget to set `has_block_entity`
+- generated block entities are used for ticking logic, not for Python-defined custom fields or inventory schemas
+
 Asset fields:
 
 - `texture`: shortcut for a default `cube_all` model texture
@@ -61,6 +67,43 @@ Hooks:
 - `@mc.on_place`
 - `@mc.on_break`
 - `@mc.on_tick`
+
+Hook behavior:
+
+- `@mc.on_use`: right click interaction
+- `@mc.on_place`: after placement
+- `@mc.on_break`: when broken by a player
+- `@mc.on_tick`: block-entity tick hook
+
+Block entity example:
+
+```python
+@mod.register
+class ReactorCore(mc.Block):
+    block_id = "reactor_core"
+    display_name = "Reactor Core"
+    has_block_entity = True
+    texture = "machines/reactor_core"
+
+    @mc.on_tick
+    def on_tick(self, ctx):
+        if not ctx.world.is_client():
+            ctx.block_entity.mark_dirty()
+```
+
+In a block tick hook:
+
+- `ctx.block_entity` is the generated block entity instance
+- `ctx.world` is the block's world
+- `ctx.pos` is the block position
+- `ctx.state` is the current block state
+
+Current block-entity scope:
+
+- generated automatically per block
+- works across Fabric, Quilt, Forge, and NeoForge
+- intended for ticking logic and access to the backing block entity object
+- custom inventories, menus, sync payloads, and serializers are not yet first-class Python APIs
 
 Example with assets:
 

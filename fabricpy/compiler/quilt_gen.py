@@ -14,12 +14,15 @@ if TYPE_CHECKING:
 
 from fabricpy.compiler.fabric_gen import (
     JavaTranspiler,
-    FABRIC_API_MAP,
+    _fabric_api_map_for_version,
     _write_main_class,
     _write_mod_blocks,
+    _write_mod_block_entities,
     _write_mod_items,
+    _write_mod_entities,
     _write_block_classes,
     _write_item_classes,
+    _write_entity_classes,
     _write_events,
     _write_commands,
     _write_mixins,
@@ -38,13 +41,16 @@ def generate_quilt_project(mod: "Mod", project_dir: Path):
     java_root.mkdir(parents=True, exist_ok=True)
     res_root.mkdir(parents=True, exist_ok=True)
 
-    transpiler = JavaTranspiler(FABRIC_API_MAP)
+    transpiler = JavaTranspiler(_fabric_api_map_for_version(mod.minecraft_version))
 
     _write_main_class(mod, java_root, pkg)
     _write_mod_blocks(mod, java_root, pkg)
+    _write_mod_block_entities(mod, java_root, pkg)
     _write_mod_items(mod, java_root, pkg)
+    _write_mod_entities(mod, java_root, pkg)
     _write_block_classes(mod, java_root, pkg, transpiler)
     _write_item_classes(mod, java_root, pkg, transpiler)
+    _write_entity_classes(mod, java_root, pkg, transpiler)
     _write_events(mod, java_root, pkg, transpiler)
     _write_commands(mod, java_root, pkg, transpiler)
     _write_mixins(mod, java_root, pkg, transpiler)

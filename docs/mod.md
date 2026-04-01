@@ -17,7 +17,7 @@ Constructor arguments:
 
 Main methods:
 
-- `mod.register(cls)`: register a `mc.Block`, `mc.Item`, or `mc.Mixin`
+- `mod.register(cls)`: register a `mc.Block`, `mc.Item`, `mc.Entity`, or `mc.Mixin`
 - `mod.event(name)`: register a mod event handler
 - `mod.command(name, permission_level=0, aliases=None)`: register a slash command
 - `mod.add_recipe(recipe_id, data)`: register raw recipe JSON
@@ -37,6 +37,14 @@ mod.register(MyBlock)
 @mod.register
 class MyItem(mc.Item):
     item_id = "my_item"
+```
+
+The same registration API is used for entities:
+
+```python
+@mod.register
+class MyEntity(mc.Entity):
+    entity_id = "my_entity"
 ```
 
 Example:

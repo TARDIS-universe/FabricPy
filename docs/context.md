@@ -44,6 +44,7 @@ World helpers:
 - `ctx.world.fill_in_dimension(dimension_id, x1, y1, z1, x2, y2, z2, block_id, mode)`
 - `ctx.world.place_structure(dimension_id, structure_id, x, y, z)`
 - `ctx.world.place_nbt(dimension_id, structure_id, x, y, z)`
+- `ctx.world.spawn_entity(entity_id, x, y, z)`
 - `ctx.world.get_time()`
 - `ctx.world.is_day()`
 - `ctx.world.is_raining()`
@@ -71,7 +72,25 @@ Raw context values that can appear depending on the hook or event:
 - `ctx.hand`
 - `ctx.stack`
 - `ctx.message`
+- `ctx.entity`
+- `ctx.block_entity`
 - `ctx.server`
+
+Entity helpers:
+
+- `ctx.entity`
+- `ctx.entity.get_pos_x()`
+- `ctx.entity.get_pos_y()`
+- `ctx.entity.get_pos_z()`
+- `ctx.entity.teleport(x, y, z)`
+- `ctx.entity.discard()`
+- `ctx.entity.set_on_fire(seconds)`
+- `ctx.entity.damage(amount)`
+
+Block entity helpers:
+
+- `ctx.block_entity`
+- `ctx.block_entity.mark_dirty()`
 
 Notes:
 
@@ -79,6 +98,8 @@ Notes:
 - `ctx.message` is primarily for chat events
 - `ctx.server` is primarily for server lifecycle and tick events
 - item ids should be full ids like `"minecraft:stone"` or `"mymod:pickle"`
+- entity ids should be full ids like `"minecraft:pig"` or `"mymod:pocket_sentinel"`
 - effect ids should be strings like `"minecraft:speed"` or `"speed"`
 - dimension ids should be full ids like `"minecraft:overworld"` or `"mymod:pocket"`
 - cross-dimension block and structure helpers use Minecraft commands under the hood
+- `ctx.entity` and `ctx.block_entity` are also exposed as the raw generated Java-backed objects, so advanced calls can be emitted if you use the loader method names directly

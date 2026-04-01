@@ -88,6 +88,8 @@ FABRIC_API_MAP: dict[str, str] = {
         'world.getServer().getCommandManager().executeWithPrefix(world.getServer().getCommandSource().withSilent(), "execute in " + {0} + " run place template " + {1} + " " + ((int)({2})) + " " + ((int)({3})) + " " + ((int)({4})))',
     "ctx.world.place_nbt":
         'world.getServer().getCommandManager().executeWithPrefix(world.getServer().getCommandSource().withSilent(), "execute in " + {0} + " run place template " + {1} + " " + ((int)({2})) + " " + ((int)({3})) + " " + ((int)({4})))',
+    "ctx.world.spawn_entity":
+        'world.getServer().getCommandManager().executeWithPrefix(world.getServer().getCommandSource().withSilent(), "summon " + {0} + " " + {1} + " " + {2} + " " + {3})',
     "ctx.world.get_time":
         'world.getTime()',
     "ctx.world.is_day":
@@ -110,6 +112,26 @@ FABRIC_API_MAP: dict[str, str] = {
         'stack',
     "ctx.message":
         'message',
+    "ctx.entity":
+        'entity',
+    "ctx.entity.get_pos_x":
+        'entity.getX()',
+    "ctx.entity.get_pos_y":
+        'entity.getY()',
+    "ctx.entity.get_pos_z":
+        'entity.getZ()',
+    "ctx.entity.teleport":
+        'entity.refreshPositionAndAngles({0}, {1}, {2}, entity.getYaw(), entity.getPitch())',
+    "ctx.entity.discard":
+        'entity.discard()',
+    "ctx.entity.set_on_fire":
+        'entity.setFireTicks((int)({0} * 20))',
+    "ctx.entity.damage":
+        'entity.damage(world.getDamageSources().generic(), {0})',
+    "ctx.block_entity":
+        'blockEntity',
+    "ctx.block_entity.mark_dirty":
+        'blockEntity.markDirty()',
     "ctx.server":
         'server',
     "ctx.server.run_command":
@@ -228,6 +250,8 @@ FORGE_API_MAP: dict[str, str] = {
         'level.getServer().getCommands().performPrefixedCommand(level.getServer().createCommandSourceStack().withSuppressedOutput(), "execute in " + {0} + " run place template " + {1} + " " + ((int)({2})) + " " + ((int)({3})) + " " + ((int)({4})))',
     "ctx.world.place_nbt":
         'level.getServer().getCommands().performPrefixedCommand(level.getServer().createCommandSourceStack().withSuppressedOutput(), "execute in " + {0} + " run place template " + {1} + " " + ((int)({2})) + " " + ((int)({3})) + " " + ((int)({4})))',
+    "ctx.world.spawn_entity":
+        'level.getServer().getCommands().performPrefixedCommand(level.getServer().createCommandSourceStack().withSuppressedOutput(), "summon " + {0} + " " + {1} + " " + {2} + " " + {3})',
     "ctx.world.get_time":
         'level.getGameTime()',
     "ctx.world.is_day":
@@ -248,6 +272,26 @@ FORGE_API_MAP: dict[str, str] = {
         'stack',
     "ctx.message":
         'message',
+    "ctx.entity":
+        'entity',
+    "ctx.entity.get_pos_x":
+        'entity.getX()',
+    "ctx.entity.get_pos_y":
+        'entity.getY()',
+    "ctx.entity.get_pos_z":
+        'entity.getZ()',
+    "ctx.entity.teleport":
+        'entity.teleportTo({0}, {1}, {2})',
+    "ctx.entity.discard":
+        'entity.discard()',
+    "ctx.entity.set_on_fire":
+        'entity.setRemainingFireTicks((int)({0} * 20))',
+    "ctx.entity.damage":
+        'entity.hurt(level.damageSources().generic(), {0})',
+    "ctx.block_entity":
+        'blockEntity',
+    "ctx.block_entity.mark_dirty":
+        'blockEntity.setChanged()',
     "ctx.server":
         'server',
     "ctx.server.run_command":

@@ -4,6 +4,7 @@
 - [mod.md](./mod.md)
 - [blocks.md](./blocks.md)
 - [items.md](./items.md)
+- [entities.md](./entities.md)
 - [recipes.md](./recipes.md)
 - [sounds.md](./sounds.md)
 - [dimensions.md](./dimensions.md)

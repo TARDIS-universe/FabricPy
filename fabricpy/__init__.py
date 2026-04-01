@@ -24,6 +24,7 @@ Usage:
 from fabricpy.mod import Mod
 from fabricpy.block import Block
 from fabricpy.item import Item
+from fabricpy.entity import Entity
 from fabricpy.mixin import Mixin
 from fabricpy.decorators import on_use, on_right_click, on_place, on_break, on_tick, inject
 
@@ -31,6 +32,7 @@ __all__ = [
     "Mod",
     "Block",
     "Item",
+    "Entity",
     "Mixin",
     "on_use",
     "on_right_click",

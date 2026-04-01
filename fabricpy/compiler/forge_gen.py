@@ -56,6 +56,27 @@ def _copy_tree_if_exists(src: Path, dest: Path):
         shutil.copytree(src, dest, dirs_exist_ok=True)
 
 
+def _blocks_with_block_entities(mod: "Mod") -> list:
+    return [
+        block for block in mod._blocks
+        if block.has_block_entity or "on_tick" in block.get_hooks()
+    ]
+
+
+def _mob_category(group: str) -> str:
+    mapping = {
+        "monster": "MobCategory.MONSTER",
+        "creature": "MobCategory.CREATURE",
+        "ambient": "MobCategory.AMBIENT",
+        "water_creature": "MobCategory.WATER_CREATURE",
+        "water_ambient": "MobCategory.WATER_AMBIENT",
+        "misc": "MobCategory.MISC",
+        "underground_water_creature": "MobCategory.UNDERGROUND_WATER_CREATURE",
+        "axolotls": "MobCategory.AXOLOTLS",
+    }
+    return mapping.get(group, "MobCategory.MISC")
+
+
 def generate_forge_project(mod: "Mod", project_dir: Path):
     """Generate a complete Forge mod project tree under project_dir."""
     pkg = mod.package
@@ -71,9 +92,12 @@ def generate_forge_project(mod: "Mod", project_dir: Path):
 
     _write_main_class(mod, java_root, pkg)
     _write_mod_blocks(mod, java_root, pkg)
+    _write_mod_block_entities(mod, java_root, pkg)
     _write_mod_items(mod, java_root, pkg)
+    _write_mod_entities(mod, java_root, pkg)
     _write_block_classes(mod, java_root, pkg, transpiler)
     _write_item_classes(mod, java_root, pkg, transpiler)
+    _write_entity_classes(mod, java_root, pkg, transpiler)
     _write_events(mod, java_root, pkg, transpiler)
     _write_commands(mod, java_root, pkg, transpiler)
     _write_resources(mod, res_root)
@@ -84,14 +108,17 @@ def generate_forge_project(mod: "Mod", project_dir: Path):
 
 def _write_main_class(mod, java_root: Path, pkg: str):
     class_name = to_pascal(mod.mod_id)
-    pkg_block = f"{pkg}.block" if mod._blocks else None
-    pkg_item = f"{pkg}.item" if mod._items else None
+    has_block_entities = bool(_blocks_with_block_entities(mod))
 
     imports = []
+    if mod._entities:
+        imports.append(f"import {pkg}.entity.ModEntities;")
     if mod._commands:
         imports.append(f"import {pkg}.command.ModCommands;")
     if mod._events:
         imports.append(f"import {pkg}.event.ModEvents;")
+    if has_block_entities:
+        imports.append(f"import {pkg}.blockentity.ModBlockEntities;")
 
     src = f"""\
 package {pkg};
@@ -117,9 +144,12 @@ public class {class_name} {{
 
         {"ModBlocks.BLOCKS.register(bus);" if mod._blocks else "// No blocks"}
         {"ModItems.ITEMS.register(bus);" if mod._items else "// No items"}
+        {"ModBlockEntities.BLOCK_ENTITIES.register(bus);" if has_block_entities else ""}
+        {"ModEntities.ENTITIES.register(bus);" if mod._entities else ""}
         {"bus.addListener(ModEvents::onCommonSetup);" if mod._events else "// No events"}
         {"bus.addListener(ModBlocks::addCreative);" if mod._blocks else ""}
         {"bus.addListener(ModItems::addCreative);" if mod._items else ""}
+        {"bus.addListener(ModEntities::registerAttributes);" if mod._entities else ""}
 
         // Register command events on Forge's main bus
         {"net.minecraftforge.common.MinecraftForge.EVENT_BUS.register(ModCommands.class);" if mod._commands else "// No commands"}
@@ -185,6 +215,43 @@ public class ModBlocks {{
     _write_text(java_root / "ModBlocks.java", src)
 
 
+def _write_mod_block_entities(mod, java_root: Path, pkg: str):
+    block_entities = _blocks_with_block_entities(mod)
+    if not block_entities:
+        return
+
+    be_dir = java_root / "blockentity"
+    be_dir.mkdir(exist_ok=True)
+    registrations = []
+    for block in block_entities:
+        cn = block.get_class_name()
+        registrations.append(
+            f'    public static final RegistryObject<BlockEntityType<{cn}BlockEntity>> {block.block_id.upper()} = '
+            f'BLOCK_ENTITIES.register("{block.block_id}", () -> BlockEntityType.Builder.of({cn}BlockEntity::new, ModBlocks.{block.block_id.upper()}.get()).build(null));'
+        )
+
+    imports = [f"import {pkg}.blockentity.{block.get_class_name()}BlockEntity;" for block in block_entities]
+    src = f"""\
+package {pkg}.blockentity;
+
+import {pkg}.{to_pascal(mod.mod_id)};
+import {pkg}.ModBlocks;
+import net.minecraft.world.level.block.entity.BlockEntityType;
+import net.minecraftforge.registries.DeferredRegister;
+import net.minecraftforge.registries.ForgeRegistries;
+import net.minecraftforge.registries.RegistryObject;
+{chr(10).join(imports)}
+
+public class ModBlockEntities {{
+    public static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITIES =
+        DeferredRegister.create(ForgeRegistries.BLOCK_ENTITY_TYPES, {to_pascal(mod.mod_id)}.MOD_ID);
+
+{chr(10).join(registrations)}
+}}
+"""
+    _write_text(be_dir / "ModBlockEntities.java", src)
+
+
 def _write_mod_items(mod, java_root: Path, pkg: str):
     if not mod._items:
         return
@@ -227,18 +294,72 @@ public class ModItems {{
     _write_text(java_root / "ModItems.java", src)
 
 
+def _write_mod_entities(mod, java_root: Path, pkg: str):
+    if not mod._entities:
+        return
+
+    entity_dir = java_root / "entity"
+    entity_dir.mkdir(exist_ok=True)
+    imports = [f"import {pkg}.entity.{entity.get_class_name()};" for entity in mod._entities]
+    reg_lines = []
+    attribute_lines = []
+    for entity in mod._entities:
+        flags = ".fireImmune()" if entity.fireproof else ""
+        reg_lines.append(
+            f'    public static final RegistryObject<EntityType<{entity.get_class_name()}>> {entity.entity_id.upper()} = '
+            f'ENTITIES.register("{entity.entity_id}", () -> EntityType.Builder.<{entity.get_class_name()}>of({entity.get_class_name()}::new, {_mob_category(entity.spawn_group)})'
+            f'.sized({entity.width}f, {entity.height}f)'
+            f'.clientTrackingRange({entity.tracking_range})'
+            f'.updateInterval({entity.update_rate})'
+            f'{flags}.build("{mod.mod_id}:{entity.entity_id}"));'
+        )
+        attribute_lines.append(
+            f"        event.put({entity.entity_id.upper()}.get(), {entity.get_class_name()}.createAttributes().build());"
+        )
+
+    src = f"""\
+package {pkg}.entity;
+
+import {pkg}.{to_pascal(mod.mod_id)};
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.MobCategory;
+import net.minecraftforge.event.entity.EntityAttributeCreationEvent;
+import net.minecraftforge.registries.DeferredRegister;
+import net.minecraftforge.registries.ForgeRegistries;
+import net.minecraftforge.registries.RegistryObject;
+{chr(10).join(imports)}
+
+public class ModEntities {{
+    public static final DeferredRegister<EntityType<?>> ENTITIES =
+        DeferredRegister.create(ForgeRegistries.ENTITY_TYPES, {to_pascal(mod.mod_id)}.MOD_ID);
+
+{chr(10).join(reg_lines)}
+
+    public static void registerAttributes(EntityAttributeCreationEvent event) {{
+{chr(10).join(attribute_lines)}
+    }}
+}}
+"""
+    _write_text(entity_dir / "ModEntities.java", src)
+
+
 def _write_block_classes(mod, java_root: Path, pkg: str, transpiler: JavaTranspiler):
     if not mod._blocks:
         return
     block_dir = java_root / "block"
     block_dir.mkdir(exist_ok=True)
+    block_entity_dir = java_root / "blockentity"
+    block_entity_dir.mkdir(exist_ok=True)
     for block in mod._blocks:
         _write_single_block(mod, block, block_dir, pkg, transpiler)
+        if block.has_block_entity or "on_tick" in block.get_hooks():
+            _write_single_block_entity(mod, block, block_entity_dir, pkg, transpiler)
 
 
 def _write_single_block(mod, block, block_dir: Path, pkg: str, transpiler: JavaTranspiler):
     cn = block.get_class_name()
     hooks = block.get_hooks()
+    has_block_entity = block.has_block_entity or "on_tick" in hooks
 
     settings = (
         f"BlockBehaviour.Properties.of()"
@@ -295,6 +416,51 @@ def _write_single_block(mod, block, block_dir: Path, pkg: str, transpiler: JavaT
     }}""")
 
     methods_str = "\n\n".join(method_blocks)
+    base_class = "Block"
+    extra_imports = ""
+    extra_methods = ""
+    if has_block_entity:
+        base_class = "BaseEntityBlock"
+        extra_imports = f"""
+import {pkg}.blockentity.{cn}BlockEntity;
+import {pkg}.blockentity.ModBlockEntities;
+import net.minecraft.world.level.block.BaseEntityBlock;
+import net.minecraft.world.level.block.RenderShape;
+import net.minecraft.world.level.block.entity.BlockEntityTicker;
+import net.minecraft.world.level.block.entity.BlockEntityType;"""
+        codec_members = ""
+        if mod.minecraft_version == "1.21.1":
+            extra_imports += """
+import com.mojang.serialization.MapCodec;"""
+            codec_members = f"""
+    public static final MapCodec<{cn}> CODEC = MapCodec.unit(new {cn}());
+
+    @Override
+    protected MapCodec<? extends BaseEntityBlock> codec() {{
+        return CODEC;
+    }}
+"""
+        ticker_body = "        return null;"
+        if "on_tick" in hooks:
+            ticker_body = (
+                f"        return createTickerHelper(type, ModBlockEntities.{block.block_id.upper()}.get(), "
+                f"{cn}BlockEntity::tick);"
+            )
+        extra_methods = f"""{codec_members}
+    @Override
+    public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {{
+        return new {cn}BlockEntity(pos, state);
+    }}
+
+    @Override
+    public RenderShape getRenderShape(BlockState state) {{
+        return RenderShape.MODEL;
+    }}
+
+    @Override
+    public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState state, BlockEntityType<T> type) {{
+{ticker_body}
+    }}"""
 
     src = f"""\
 package {pkg}.block;
@@ -319,20 +485,58 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.registries.ForgeRegistries;
 import org.jetbrains.annotations.Nullable;
+{extra_imports}
 
 /**
  * {block.get_display_name()} — generated by fabricpy
  */
-public class {cn} extends Block {{
+public class {cn} extends {base_class} {{
 
     public {cn}() {{
         super({settings});
     }}
 
 {methods_str}
+{extra_methods}
 }}
 """
     _write_text(block_dir / f"{cn}.java", src)
+
+
+def _write_single_block_entity(mod, block, block_entity_dir: Path, pkg: str, transpiler: JavaTranspiler):
+    cn = block.get_class_name()
+    hooks = block.get_hooks()
+    tick_method = ""
+    if "on_tick" in hooks:
+        body = transpiler.transpile_method(
+            __import__("inspect").getsource(hooks["on_tick"])
+        )
+        tick_method = f"""
+    public static void tick(Level level, BlockPos pos, BlockState state, {cn}BlockEntity blockEntity) {{
+        BlockPos soundPos = pos;
+{body}
+    }}"""
+
+    src = f"""\
+package {pkg}.blockentity;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+
+/**
+ * Block entity backing {block.get_display_name()}.
+ */
+public class {cn}BlockEntity extends BlockEntity {{
+
+    public {cn}BlockEntity(BlockPos pos, BlockState state) {{
+        super(ModBlockEntities.{block.block_id.upper()}.get(), pos, state);
+    }}
+{tick_method}
+}}
+"""
+    _write_text(block_entity_dir / f"{cn}BlockEntity.java", src)
 
 
 def _write_item_classes(mod, java_root: Path, pkg: str, transpiler: JavaTranspiler):
@@ -402,6 +606,74 @@ public class {cn} extends Item {{
 }}
 """
     _write_text(item_dir / f"{cn}.java", src)
+
+
+def _write_entity_classes(mod, java_root: Path, pkg: str, transpiler: JavaTranspiler):
+    if not mod._entities:
+        return
+    entity_dir = java_root / "entity"
+    entity_dir.mkdir(exist_ok=True)
+    for entity in mod._entities:
+        _write_single_entity(entity, entity_dir, pkg, transpiler)
+
+
+def _write_single_entity(entity, entity_dir: Path, pkg: str, transpiler: JavaTranspiler):
+    cn = entity.get_class_name()
+    hooks = entity.get_hooks()
+    method_blocks = []
+    if "on_tick" in hooks:
+        body = transpiler.transpile_method(
+            __import__("inspect").getsource(hooks["on_tick"])
+        )
+        method_blocks.append(f"""\
+    @Override
+    public void tick() {{
+        super.tick();
+        var entity = this;
+        Level level = this.level();
+        BlockPos pos = this.blockPosition();
+        BlockPos soundPos = pos;
+{body}
+    }}""")
+
+    src = f"""\
+package {pkg}.entity;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.PathfinderMob;
+import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.level.Level;
+
+/**
+ * {entity.get_display_name()} - generated by fabricpy
+ */
+public class {cn} extends PathfinderMob {{
+
+    public {cn}(EntityType<? extends PathfinderMob> entityType, Level level) {{
+        super(entityType, level);
+    }}
+
+    public static AttributeSupplier.Builder createAttributes() {{
+        return LivingEntity.createLivingAttributes()
+            .add(Attributes.MAX_HEALTH, {entity.max_health}d)
+            .add(Attributes.MOVEMENT_SPEED, {entity.movement_speed}d)
+            .add(Attributes.ATTACK_DAMAGE, {entity.attack_damage}d)
+            .add(Attributes.FOLLOW_RANGE, {entity.follow_range}d)
+            .add(Attributes.KNOCKBACK_RESISTANCE, {entity.knockback_resistance}d);
+    }}
+
+    @Override
+    protected void registerGoals() {{
+        // No default AI goals generated by fabricpy yet.
+    }}
+
+{chr(10).join(method_blocks)}
+}}
+"""
+    _write_text(entity_dir / f"{cn}.java", src)
 
 
 def _write_events(mod, java_root: Path, pkg: str, transpiler: JavaTranspiler):
@@ -573,6 +845,8 @@ description="{mod.description}"
         lang[f"block.{mod.mod_id}.{b.block_id}"] = b.get_display_name()
     for it in mod._items:
         lang[f"item.{mod.mod_id}.{it.item_id}"] = it.get_display_name()
+    for entity in mod._entities:
+        lang[f"entity.{mod.mod_id}.{entity.entity_id}"] = entity.get_display_name()
     for sound in mod._sounds:
         if sound.get("subtitle_text"):
             key = f"subtitles.{mod.mod_id}.{sound['id'].replace('/', '.')}"

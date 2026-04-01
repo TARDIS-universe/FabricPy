@@ -76,6 +76,7 @@ class Mod:
 
         self._blocks: list = []
         self._items: list = []
+        self._entities: list = []
         self._mixins: list = []
         self._events: list = []
         self._commands: list = []
@@ -91,7 +92,7 @@ class Mod:
 
     def register(self, cls):
         """
-        Register a Block, Item, or Mixin class with this mod.
+        Register a Block, Item, Entity, or Mixin class with this mod.
         Can be used as a decorator or called directly.
 
         Example:
@@ -103,6 +104,7 @@ class Mod:
         """
         from fabricpy.block import Block
         from fabricpy.item import Item
+        from fabricpy.entity import Entity
         from fabricpy.mixin import Mixin
 
         if isinstance(cls, type):
@@ -112,10 +114,13 @@ class Mod:
             elif issubclass(cls, Item) and cls is not Item:
                 cls.namespace = self.mod_id
                 self._items.append(cls)
+            elif issubclass(cls, Entity) and cls is not Entity:
+                cls.namespace = self.mod_id
+                self._entities.append(cls)
             elif issubclass(cls, Mixin) and cls is not Mixin:
                 self._mixins.append(cls)
             else:
-                raise TypeError(f"Cannot register {cls}: must be a Block, Item, or Mixin subclass.")
+                raise TypeError(f"Cannot register {cls}: must be a Block, Item, Entity, or Mixin subclass.")
         return cls
 
     # ------------------------------------------------------------------ #
@@ -377,7 +382,7 @@ class Mod:
         return (
             f"<Mod id={self.mod_id!r} name={self.name!r} "
             f"loader={self.loader!r} mc={self.minecraft_version!r} "
-            f"blocks={len(self._blocks)} items={len(self._items)} "
+            f"blocks={len(self._blocks)} items={len(self._items)} entities={len(self._entities)} "
             f"events={len(self._events)} commands={len(self._commands)} "
             f"recipes={len(self._recipes)} sounds={len(self._sounds)} "
             f"dimension_types={len(self._dimension_types)} dimensions={len(self._dimensions)} "
