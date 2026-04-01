@@ -2,3 +2,5 @@
 /.fabricpy_build
 *.java
 /.fabricpy_build/test-forge
+/assets/playtime
+plytm.py
