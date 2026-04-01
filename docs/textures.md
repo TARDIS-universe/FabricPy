@@ -7,6 +7,12 @@ Folders:
 - block textures: `assets/<modid>/textures/block/...`
 - item textures: `assets/<modid>/textures/item/...`
 
+Emissive companion textures:
+
+- block emissive overlays live alongside normal block textures
+- item emissive overlays live alongside normal item textures
+- the usual naming pattern is something like `lamp.png` and `lamp_em.png`
+
 How `texture = ...` resolves:
 
 - on `mc.Block`, `texture = "decor/lamp"` means:
@@ -25,6 +31,10 @@ Examples:
   `texture = "block/block"`
   file:
   `assets/<modid>/textures/block/block.png`
+- block emissive overlay:
+  `emissive_texture = "block/block_em"`
+  file:
+  `assets/<modid>/textures/block/block_em.png`
 
 Compile behavior:
 

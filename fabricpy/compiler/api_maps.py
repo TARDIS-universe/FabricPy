@@ -68,6 +68,24 @@ FABRIC_API_MAP: dict[str, str] = {
         'player.getY()',
     "ctx.player.get_pos_z":
         'player.getZ()',
+    "ctx.player.get_main_hand_item_id":
+        'Registries.ITEM.getId(player.getMainHandStack().getItem()).toString()',
+    "ctx.player.get_main_hand_count":
+        'player.getMainHandStack().getCount()',
+    "ctx.player.get_offhand_item_id":
+        'Registries.ITEM.getId(player.getOffHandStack().getItem()).toString()',
+    "ctx.player.get_offhand_count":
+        'player.getOffHandStack().getCount()',
+    "ctx.player.consume_main_hand_item":
+        'player.getMainHandStack().decrement((int)({0}))',
+    "ctx.player.set_main_hand_item":
+        'player.setStackInHand(Hand.MAIN_HAND, new ItemStack(Registries.ITEM.get(new Identifier({0})), (int)({1})))',
+    "ctx.player.has_item":
+        '(player.getInventory().main.stream().anyMatch(s -> s.isOf(Registries.ITEM.get(new Identifier({0})))) || player.getOffHandStack().isOf(Registries.ITEM.get(new Identifier({0}))))',
+    "ctx.player.count_item":
+        '(player.getInventory().main.stream().filter(s -> s.isOf(Registries.ITEM.get(new Identifier({0})))).mapToInt(ItemStack::getCount).sum() + (player.getOffHandStack().isOf(Registries.ITEM.get(new Identifier({0}))) ? player.getOffHandStack().getCount() : 0))',
+    "ctx.player.add_cooldown":
+        'player.getItemCooldownManager().set(Registries.ITEM.get(new Identifier({0})), (int)({1}))',
 
     # World
     "ctx.world":
@@ -80,6 +98,20 @@ FABRIC_API_MAP: dict[str, str] = {
         'world.createExplosion(null, {0}, {1}, {2}, {3}, false, World.ExplosionSourceType.NONE)',
     "ctx.world.set_block":
         'world.setBlockState(new BlockPos((int){0}, (int){1}, (int){2}), Registries.BLOCK.get(new Identifier({3})).getDefaultState())',
+    "ctx.world.set_block_self":
+        'world.setBlockState(pos, Registries.BLOCK.get(new Identifier({0})).getDefaultState())',
+    "ctx.world.break_block":
+        'world.breakBlock(new BlockPos((int){0}, (int){1}, (int){2}), {3})',
+    "ctx.world.break_self":
+        'world.breakBlock(pos, {0})',
+    "ctx.world.get_block_id":
+        'Registries.BLOCK.getId(world.getBlockState(new BlockPos((int){0}, (int){1}, (int){2})).getBlock()).toString()',
+    "ctx.world.get_self_block_id":
+        'Registries.BLOCK.getId(world.getBlockState(pos).getBlock()).toString()',
+    "ctx.world.is_air":
+        'world.isAir(new BlockPos((int){0}, (int){1}, (int){2}))',
+    "ctx.world.is_self_air":
+        'world.isAir(pos)',
     "ctx.world.set_block_in_dimension":
         'world.getServer().getCommandManager().executeWithPrefix(world.getServer().getCommandSource().withSilent(), "execute in " + {0} + " run setblock " + ((int)({1})) + " " + ((int)({2})) + " " + ((int)({3})) + " " + {4})',
     "ctx.world.fill_in_dimension":
@@ -110,6 +142,24 @@ FABRIC_API_MAP: dict[str, str] = {
         'hand',
     "ctx.stack":
         'stack',
+    "ctx.stack.get_item_id":
+        'Registries.ITEM.getId(stack.getItem()).toString()',
+    "ctx.stack.get_count":
+        'stack.getCount()',
+    "ctx.stack.get_texture":
+        '(stack.hasNbt() && stack.getNbt().contains("fabricpy_texture") ? stack.getNbt().getString("fabricpy_texture") : "")',
+    "ctx.stack.texture_change":
+        'stack.getOrCreateNbt().putString("fabricpy_texture", {0})',
+    "ctx.stack.get_model":
+        '(stack.hasNbt() && stack.getNbt().contains("fabricpy_model") ? stack.getNbt().getString("fabricpy_model") : "")',
+    "ctx.stack.model_change":
+        'stack.getOrCreateNbt().putString("fabricpy_model", {0})',
+    "ctx.stack.decrement":
+        'stack.decrement((int)({0}))',
+    "ctx.stack.increment":
+        'stack.increment((int)({0}))',
+    "ctx.stack.is_of":
+        'stack.isOf(Registries.ITEM.get(new Identifier({0})))',
     "ctx.message":
         'message',
     "ctx.entity":
@@ -132,6 +182,36 @@ FABRIC_API_MAP: dict[str, str] = {
         'blockEntity',
     "ctx.block_entity.mark_dirty":
         'blockEntity.markDirty()',
+    "ctx.block_entity.get_string":
+        'blockEntity.getStringData({0})',
+    "ctx.block_entity.get_texture":
+        'blockEntity.getStringData("__fabricpy_texture")',
+    "ctx.block_entity.texture_change":
+        'blockEntity.setStringData("__fabricpy_texture", {0})',
+    "ctx.block_entity.get_model":
+        'blockEntity.getStringData("__fabricpy_model")',
+    "ctx.block_entity.model_change":
+        'blockEntity.setStringData("__fabricpy_model", {0})',
+    "ctx.block_entity.set_string":
+        'blockEntity.setStringData({0}, {1})',
+    "ctx.block_entity.get_int":
+        'blockEntity.getIntData({0})',
+    "ctx.block_entity.set_int":
+        'blockEntity.setIntData({0}, (int)({1}))',
+    "ctx.block_entity.get_bool":
+        'blockEntity.getBoolData({0})',
+    "ctx.block_entity.set_bool":
+        'blockEntity.setBoolData({0}, {1})',
+    "ctx.block_entity.get_double":
+        'blockEntity.getDoubleData({0})',
+    "ctx.block_entity.set_double":
+        'blockEntity.setDoubleData({0}, {1})',
+    "ctx.block_entity.has":
+        'blockEntity.hasData({0})',
+    "ctx.block_entity.remove":
+        'blockEntity.removeData({0})',
+    "ctx.block_entity.sync":
+        'blockEntity.syncData()',
     "ctx.server":
         'server',
     "ctx.server.run_command":
@@ -158,6 +238,7 @@ FABRIC_EXTRA_IMPORTS: list[str] = [
     "import net.minecraft.text.Text;",
     "import net.minecraft.registry.Registries;",
     "import net.minecraft.util.Identifier;",
+    "import net.minecraft.util.Hand;",
     "import net.minecraft.item.ItemStack;",
     "import net.minecraft.entity.effect.StatusEffectInstance;",
     "import net.minecraft.entity.effect.StatusEffects;",
@@ -230,6 +311,24 @@ FORGE_API_MAP: dict[str, str] = {
         'player.getY()',
     "ctx.player.get_pos_z":
         'player.getZ()',
+    "ctx.player.get_main_hand_item_id":
+        'ForgeRegistries.ITEMS.getKey(player.getMainHandItem().getItem()).toString()',
+    "ctx.player.get_main_hand_count":
+        'player.getMainHandItem().getCount()',
+    "ctx.player.get_offhand_item_id":
+        'ForgeRegistries.ITEMS.getKey(player.getOffhandItem().getItem()).toString()',
+    "ctx.player.get_offhand_count":
+        'player.getOffhandItem().getCount()',
+    "ctx.player.consume_main_hand_item":
+        'player.getMainHandItem().shrink((int)({0}))',
+    "ctx.player.set_main_hand_item":
+        'player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(ForgeRegistries.ITEMS.getValue(new ResourceLocation({0})), (int)({1})))',
+    "ctx.player.has_item":
+        '(player.getInventory().items.stream().anyMatch(s -> s.is(ForgeRegistries.ITEMS.getValue(new ResourceLocation({0})))) || player.getOffhandItem().is(ForgeRegistries.ITEMS.getValue(new ResourceLocation({0}))))',
+    "ctx.player.count_item":
+        '(player.getInventory().items.stream().filter(s -> s.is(ForgeRegistries.ITEMS.getValue(new ResourceLocation({0})))).mapToInt(ItemStack::getCount).sum() + (player.getOffhandItem().is(ForgeRegistries.ITEMS.getValue(new ResourceLocation({0}))) ? player.getOffhandItem().getCount() : 0))',
+    "ctx.player.add_cooldown":
+        'player.getCooldowns().addCooldown(ForgeRegistries.ITEMS.getValue(new ResourceLocation({0})), (int)({1}))',
 
     # World (Forge calls it "level" not "world")
     "ctx.world":
@@ -242,6 +341,20 @@ FORGE_API_MAP: dict[str, str] = {
         'level.explode(null, {0}, {1}, {2}, {3}, false, Level.ExplosionInteraction.NONE)',
     "ctx.world.set_block":
         'level.setBlock(new BlockPos((int){0}, (int){1}, (int){2}), ForgeRegistries.BLOCKS.getValue(new ResourceLocation({3})).defaultBlockState(), 3)',
+    "ctx.world.set_block_self":
+        'level.setBlock(pos, ForgeRegistries.BLOCKS.getValue(new ResourceLocation({0})).defaultBlockState(), 3)',
+    "ctx.world.break_block":
+        'level.destroyBlock(new BlockPos((int){0}, (int){1}, (int){2}), {3})',
+    "ctx.world.break_self":
+        'level.destroyBlock(pos, {0})',
+    "ctx.world.get_block_id":
+        'ForgeRegistries.BLOCKS.getKey(level.getBlockState(new BlockPos((int){0}, (int){1}, (int){2})).getBlock()).toString()',
+    "ctx.world.get_self_block_id":
+        'ForgeRegistries.BLOCKS.getKey(level.getBlockState(pos).getBlock()).toString()',
+    "ctx.world.is_air":
+        'level.isEmptyBlock(new BlockPos((int){0}, (int){1}, (int){2}))',
+    "ctx.world.is_self_air":
+        'level.isEmptyBlock(pos)',
     "ctx.world.set_block_in_dimension":
         'level.getServer().getCommands().performPrefixedCommand(level.getServer().createCommandSourceStack().withSuppressedOutput(), "execute in " + {0} + " run setblock " + ((int)({1})) + " " + ((int)({2})) + " " + ((int)({3})) + " " + {4})',
     "ctx.world.fill_in_dimension":
@@ -270,6 +383,24 @@ FORGE_API_MAP: dict[str, str] = {
         'hand',
     "ctx.stack":
         'stack',
+    "ctx.stack.get_item_id":
+        'ForgeRegistries.ITEMS.getKey(stack.getItem()).toString()',
+    "ctx.stack.get_count":
+        'stack.getCount()',
+    "ctx.stack.get_texture":
+        '(stack.hasTag() && stack.getTag().contains("fabricpy_texture") ? stack.getTag().getString("fabricpy_texture") : "")',
+    "ctx.stack.texture_change":
+        'stack.getOrCreateTag().putString("fabricpy_texture", {0})',
+    "ctx.stack.get_model":
+        '(stack.hasTag() && stack.getTag().contains("fabricpy_model") ? stack.getTag().getString("fabricpy_model") : "")',
+    "ctx.stack.model_change":
+        'stack.getOrCreateTag().putString("fabricpy_model", {0})',
+    "ctx.stack.decrement":
+        'stack.shrink((int)({0}))',
+    "ctx.stack.increment":
+        'stack.grow((int)({0}))',
+    "ctx.stack.is_of":
+        'stack.is(ForgeRegistries.ITEMS.getValue(new ResourceLocation({0})))',
     "ctx.message":
         'message',
     "ctx.entity":
@@ -292,6 +423,36 @@ FORGE_API_MAP: dict[str, str] = {
         'blockEntity',
     "ctx.block_entity.mark_dirty":
         'blockEntity.setChanged()',
+    "ctx.block_entity.get_string":
+        'blockEntity.getStringData({0})',
+    "ctx.block_entity.get_texture":
+        'blockEntity.getStringData("__fabricpy_texture")',
+    "ctx.block_entity.texture_change":
+        'blockEntity.setStringData("__fabricpy_texture", {0})',
+    "ctx.block_entity.get_model":
+        'blockEntity.getStringData("__fabricpy_model")',
+    "ctx.block_entity.model_change":
+        'blockEntity.setStringData("__fabricpy_model", {0})',
+    "ctx.block_entity.set_string":
+        'blockEntity.setStringData({0}, {1})',
+    "ctx.block_entity.get_int":
+        'blockEntity.getIntData({0})',
+    "ctx.block_entity.set_int":
+        'blockEntity.setIntData({0}, (int)({1}))',
+    "ctx.block_entity.get_bool":
+        'blockEntity.getBoolData({0})',
+    "ctx.block_entity.set_bool":
+        'blockEntity.setBoolData({0}, {1})',
+    "ctx.block_entity.get_double":
+        'blockEntity.getDoubleData({0})',
+    "ctx.block_entity.set_double":
+        'blockEntity.setDoubleData({0}, {1})',
+    "ctx.block_entity.has":
+        'blockEntity.hasData({0})',
+    "ctx.block_entity.remove":
+        'blockEntity.removeData({0})',
+    "ctx.block_entity.sync":
+        'blockEntity.syncData()',
     "ctx.server":
         'server',
     "ctx.server.run_command":
@@ -317,6 +478,7 @@ FORGE_API_MAP: dict[str, str] = {
 FORGE_EXTRA_IMPORTS: list[str] = [
     "import net.minecraft.network.chat.Component;",
     "import net.minecraft.resources.ResourceLocation;",
+    "import net.minecraft.world.InteractionHand;",
     "import net.minecraft.world.item.ItemStack;",
     "import net.minecraft.world.effect.MobEffectInstance;",
     "import net.minecraft.world.effect.MobEffects;",
@@ -371,6 +533,30 @@ FABRIC_EVENT_MAP: dict[str, dict] = {
     "player_chat": {
         "import": "import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;",
         "register": "ServerMessageEvents.CHAT_MESSAGE.register((signedMessage, player, params) -> {{\n            var server = player.getServer();\n            ServerWorld world = player.getServerWorld();\n            BlockPos soundPos = player.getBlockPos();\n            String message = signedMessage.getSignedContent();\n            {body}\n        }});",
+    },
+    "player_tick": {
+        "import": "import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;",
+        "register": "ServerTickEvents.END_SERVER_TICK.register((server) -> {{\n            for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {{\n                ServerWorld world = player.getServerWorld();\n                BlockPos soundPos = player.getBlockPos();\n                {body}\n            }}\n        }});",
+    },
+    "player_use_item": {
+        "import": "import net.fabricmc.fabric.api.event.player.UseItemCallback;\nimport net.minecraft.util.TypedActionResult;",
+        "register": "UseItemCallback.EVENT.register((player, world, hand) -> {{\n            ItemStack stack = player.getStackInHand(hand);\n            BlockPos soundPos = player.getBlockPos();\n            {body}\n            return TypedActionResult.pass(stack);\n        }});",
+    },
+    "player_use_block": {
+        "import": "import net.fabricmc.fabric.api.event.player.UseBlockCallback;\nimport net.minecraft.block.BlockState;",
+        "register": "UseBlockCallback.EVENT.register((player, world, hand, hitResult) -> {{\n            BlockPos pos = hitResult.getBlockPos();\n            BlockState state = world.getBlockState(pos);\n            ItemStack stack = player.getStackInHand(hand);\n            BlockPos soundPos = pos;\n            {body}\n            return ActionResult.PASS;\n        }});",
+    },
+    "player_attack_entity": {
+        "import": "import net.fabricmc.fabric.api.event.player.AttackEntityCallback;",
+        "register": "AttackEntityCallback.EVENT.register((player, world, hand, entity, hitResult) -> {{\n            ItemStack stack = player.getStackInHand(hand);\n            BlockPos soundPos = player.getBlockPos();\n            {body}\n            return ActionResult.PASS;\n        }});",
+    },
+    "player_interact_entity": {
+        "import": "import net.fabricmc.fabric.api.event.player.UseEntityCallback;",
+        "register": "UseEntityCallback.EVENT.register((player, world, hand, entity, hitResult) -> {{\n            ItemStack stack = player.getStackInHand(hand);\n            BlockPos soundPos = player.getBlockPos();\n            {body}\n            return ActionResult.PASS;\n        }});",
+    },
+    "entity_death": {
+        "import": "import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;",
+        "register": "ServerLivingEntityEvents.AFTER_DEATH.register((entity, damageSource) -> {{\n            if (entity instanceof ServerPlayerEntity) {{ return; }}\n            var server = entity.getServer();\n            ServerWorld world = (ServerWorld) entity.getWorld();\n            BlockPos soundPos = entity.getBlockPos();\n            {body}\n        }});",
     },
 }
 
@@ -468,6 +654,79 @@ FORGE_EVENT_MAP: dict[str, dict] = {
             "        var level = player.level();",
             "        var soundPos = player.blockPosition();",
             "        String message = event.getMessage().getString();",
+        ],
+    },
+    "player_tick": {
+        "class": "TickEvent.PlayerTickEvent",
+        "import": "import net.minecraftforge.event.TickEvent;",
+        "setup": "        if (event.phase != TickEvent.Phase.END || !(event.player instanceof Player player)) {\n            return;\n        }",
+        "locals": [
+            "        var server = player.getServer();",
+            "        var level = player.level();",
+            "        var soundPos = player.blockPosition();",
+        ],
+    },
+    "player_use_item": {
+        "class": "PlayerInteractEvent.RightClickItem",
+        "import": "import net.minecraftforge.event.entity.player.PlayerInteractEvent;",
+        "locals": [
+            "        Player player = event.getEntity();",
+            "        var server = player.getServer();",
+            "        var level = player.level();",
+            "        var hand = event.getHand();",
+            "        var stack = event.getItemStack();",
+            "        var soundPos = player.blockPosition();",
+        ],
+    },
+    "player_use_block": {
+        "class": "PlayerInteractEvent.RightClickBlock",
+        "import": "import net.minecraftforge.event.entity.player.PlayerInteractEvent;",
+        "locals": [
+            "        Player player = event.getEntity();",
+            "        var server = player.getServer();",
+            "        var level = player.level();",
+            "        var hand = event.getHand();",
+            "        var stack = event.getItemStack();",
+            "        var pos = event.getPos();",
+            "        var state = level.getBlockState(pos);",
+            "        var soundPos = pos;",
+        ],
+    },
+    "player_attack_entity": {
+        "class": "AttackEntityEvent",
+        "import": "import net.minecraftforge.event.entity.player.AttackEntityEvent;\nimport net.minecraft.world.InteractionHand;",
+        "locals": [
+            "        Player player = event.getEntity();",
+            "        var server = player.getServer();",
+            "        var level = player.level();",
+            "        var hand = InteractionHand.MAIN_HAND;",
+            "        var stack = player.getMainHandItem();",
+            "        var entity = event.getTarget();",
+            "        var soundPos = player.blockPosition();",
+        ],
+    },
+    "player_interact_entity": {
+        "class": "PlayerInteractEvent.EntityInteract",
+        "import": "import net.minecraftforge.event.entity.player.PlayerInteractEvent;",
+        "locals": [
+            "        Player player = event.getEntity();",
+            "        var server = player.getServer();",
+            "        var level = player.level();",
+            "        var hand = event.getHand();",
+            "        var stack = event.getItemStack();",
+            "        var entity = event.getTarget();",
+            "        var soundPos = player.blockPosition();",
+        ],
+    },
+    "entity_death": {
+        "class": "LivingDeathEvent",
+        "import": "import net.minecraftforge.event.entity.living.LivingDeathEvent;",
+        "setup": "        if (event.getEntity() instanceof Player) {\n            return;\n        }",
+        "locals": [
+            "        var entity = event.getEntity();",
+            "        var level = entity.level();",
+            "        var server = level.getServer();",
+            "        var soundPos = entity.blockPosition();",
         ],
     },
 }

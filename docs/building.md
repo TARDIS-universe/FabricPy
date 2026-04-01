@@ -18,12 +18,13 @@ JDK selection:
 
 ## Supported Matrix
 
-- `1.20.1`: Fabric, Quilt, Forge
-- `1.21.1`: Fabric, Quilt, Forge, NeoForge
+- `1.20.1`: Fabric, Forge
+- `1.21.1`: Fabric, Forge
 
 Gradle wrapper selection:
 
-- Fabric, Quilt, and NeoForge projects use Gradle `8.8`
+- Fabric projects use Gradle `8.8`
+- Forge `1.20.1` projects use Gradle `8.8`
 - Forge `1.21.1` projects use Gradle `9.3.0`
 - `fabricpy` selects the wrapper version automatically per generated loader project
 
@@ -65,20 +66,16 @@ python .\examples\tardis_mod.py --output .\out
 Generated projects:
 
 - `.fabricpy_build\<modid>-fabric\`
-- `.fabricpy_build\<modid>-quilt\`
 - `.fabricpy_build\<modid>-forge\`
-- `.fabricpy_build\<modid>-neoforge\`
 
 Built jars:
 
 - `dist\<fabric-jar>`
-- `dist\<quilt-jar>`
 - `dist\<forge-jar>`
-- `dist\<neoforge-jar>`
 
 ## Troubleshooting
 
-- Fabric or Quilt `1.21.1` item texture is missing:
+- Fabric `1.21.1` item texture is missing:
   check the generated or overridden item model and make sure it points at `<modid>:item/...`
 - block renders but break particles are wrong:
   check the final block model JSON for a `particle` texture entry

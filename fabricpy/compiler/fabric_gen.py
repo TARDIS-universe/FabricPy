@@ -52,6 +52,211 @@ def _resource_ref(mod_id: str, ref: str, folder: str, default_id: str) -> str:
     return f"{mod_id}:{folder}/{default_id}"
 
 
+def _clamp_emissive_level(level: int) -> int:
+    try:
+        return max(0, min(255, int(level)))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _block_light_level(block) -> int:
+    emissive = _clamp_emissive_level(getattr(block, "emissive_level", 0))
+    mapped = 0 if emissive <= 0 else max(1, min(15, (emissive + 16) // 17))
+    return max(int(block.luminance), mapped)
+
+
+def _overlay_texture_map(base_textures: dict | None, override_textures: dict | None, emissive_ref: str) -> dict:
+    if override_textures:
+        return dict(override_textures)
+    if base_textures:
+        overlay = dict(base_textures)
+        for key in list(overlay.keys()):
+            overlay[key] = emissive_ref
+        return overlay
+    return {"all": emissive_ref, "particle": emissive_ref}
+
+
+def _append_emissive_overlay_blockstate(blockstate: dict, overlay_model_id: str) -> dict:
+    data = json.loads(json.dumps(blockstate))
+    if "variants" in data:
+        multipart = []
+        for key, value in data["variants"].items():
+            when = {}
+            if key:
+                for condition in key.split(","):
+                    if "=" in condition:
+                        prop, prop_value = condition.split("=", 1)
+                        when[prop] = prop_value
+            base_part = {"apply": value}
+            overlay_apply = json.loads(json.dumps(value))
+            if isinstance(overlay_apply, dict):
+                overlay_apply["model"] = overlay_model_id
+            elif isinstance(overlay_apply, list):
+                for entry in overlay_apply:
+                    if isinstance(entry, dict):
+                        entry["model"] = overlay_model_id
+            overlay_part = {"apply": overlay_apply}
+            if when:
+                base_part["when"] = when
+                overlay_part["when"] = dict(when)
+            multipart.append(base_part)
+            multipart.append(overlay_part)
+        return {"multipart": multipart}
+    if "multipart" in data:
+        parts = list(data["multipart"])
+        overlays = []
+        for part in parts:
+            overlay_part = json.loads(json.dumps(part))
+            apply = overlay_part.get("apply")
+            if isinstance(apply, dict):
+                apply["model"] = overlay_model_id
+            elif isinstance(apply, list):
+                for entry in apply:
+                    if isinstance(entry, dict):
+                        entry["model"] = overlay_model_id
+            overlays.append(overlay_part)
+        data["multipart"] = parts + overlays
+    return data
+
+
+def _normalize_block_model_id(mod_id: str, model_ref: str, default_name: str) -> str:
+    ref = (model_ref or "").strip()
+    if not ref:
+        return f"{mod_id}:block/{default_name}"
+    if ":" in ref:
+        return ref
+    if ref.startswith("block/"):
+        return f"{mod_id}:{ref}"
+    return f"{mod_id}:block/{ref}"
+
+
+def _generated_rotation_blockstate(mod_id: str, block) -> dict:
+    wall_model_id = _normalize_block_model_id(mod_id, getattr(block, "wall_model", ""), block.block_id)
+    floor_model_id = _normalize_block_model_id(mod_id, getattr(block, "floor_model", ""), block.block_id)
+    variants = {}
+    rotations = {
+        "north": 0,
+        "east": 90,
+        "south": 180,
+        "west": 270,
+    }
+    if getattr(block, "rotation_mode", "wall") == "floor":
+        for facing, y in rotations.items():
+            variants[f"facing={facing}"] = {"model": floor_model_id, "x": 90, "y": y}
+    else:
+        for facing, y in rotations.items():
+            variants[f"facing={facing}"] = {"model": wall_model_id, "y": y}
+    return {"variants": variants}
+
+
+def _model_file_from_id(project_root: Path, default_mod_id: str, model_id: str) -> Path | None:
+    if ":" in model_id:
+        namespace, path = model_id.split(":", 1)
+    else:
+        namespace, path = default_mod_id, model_id
+    if not path.startswith("block/"):
+        return None
+    rel = path[len("block/"):]
+    return project_root / "assets" / namespace / "models" / "block" / f"{rel}.json"
+
+
+def _load_block_model_data(project_root: Path, mod, block, model_id: str) -> dict | None:
+    default_model_id = _normalize_block_model_id(mod.mod_id, "", block.block_id)
+    if model_id == default_model_id and isinstance(block.model, dict):
+        return block.model
+    model_file = _model_file_from_id(project_root, mod.mod_id, model_id)
+    if model_file and model_file.exists():
+        try:
+            return json.loads(model_file.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return None
+    return None
+
+
+def _rotate_point_y(x: float, z: float, quarter_turns: int) -> tuple[float, float]:
+    turns = quarter_turns % 4
+    cx = x - 8.0
+    cz = z - 8.0
+    if turns == 0:
+        rx, rz = cx, cz
+    elif turns == 1:
+        rx, rz = -cz, cx
+    elif turns == 2:
+        rx, rz = -cx, -cz
+    else:
+        rx, rz = cz, -cx
+    return rx + 8.0, rz + 8.0
+
+
+def _rotate_point_x_90(y: float, z: float) -> tuple[float, float]:
+    cy = y - 8.0
+    cz = z - 8.0
+    ry = -cz
+    rz = cy
+    return ry + 8.0, rz + 8.0
+
+
+def _transform_box(box: tuple[float, float, float, float, float, float], mode: str, facing: str) -> tuple[float, float, float, float, float, float]:
+    x1, y1, z1, x2, y2, z2 = box
+    corners = [
+        (x, y, z)
+        for x in (x1, x2)
+        for y in (y1, y2)
+        for z in (z1, z2)
+    ]
+    transformed = []
+    quarter_turns = {"north": 0, "east": 1, "south": 2, "west": 3}.get(facing, 0)
+    for x, y, z in corners:
+        tx, ty, tz = x, y, z
+        if mode == "floor":
+            ty, tz = _rotate_point_x_90(ty, tz)
+        tx, tz = _rotate_point_y(tx, tz, quarter_turns)
+        transformed.append((tx, ty, tz))
+    xs = [p[0] for p in transformed]
+    ys = [p[1] for p in transformed]
+    zs = [p[2] for p in transformed]
+    return (min(xs), min(ys), min(zs), max(xs), max(ys), max(zs))
+
+
+def _model_boxes_for_block(project_root: Path, mod, block) -> dict[str, list[tuple[float, float, float, float, float, float]]]:
+    mode = getattr(block, "rotation_mode", "wall")
+    wall_model_id = _normalize_block_model_id(mod.mod_id, getattr(block, "wall_model", ""), block.block_id)
+    floor_model_id = _normalize_block_model_id(mod.mod_id, getattr(block, "floor_model", ""), block.block_id)
+    base_model_id = floor_model_id if mode == "floor" else wall_model_id
+    model_data = _load_block_model_data(project_root, mod, block, base_model_id)
+    if not isinstance(model_data, dict):
+        return {}
+    elements = model_data.get("elements")
+    if not isinstance(elements, list):
+        return {}
+    base_boxes = []
+    for element in elements:
+        if not isinstance(element, dict):
+            continue
+        from_pos = element.get("from")
+        to_pos = element.get("to")
+        if not (isinstance(from_pos, list) and isinstance(to_pos, list) and len(from_pos) == 3 and len(to_pos) == 3):
+            continue
+        base_boxes.append((
+            float(from_pos[0]), float(from_pos[1]), float(from_pos[2]),
+            float(to_pos[0]), float(to_pos[1]), float(to_pos[2]),
+        ))
+    if not base_boxes:
+        return {}
+    if getattr(block, "variable_rotation", False):
+        return {
+            facing: [_transform_box(box, mode, facing) for box in base_boxes]
+            for facing in ("north", "east", "south", "west")
+        }
+    return {"default": base_boxes}
+
+
+def _fabric_shape_code(shape_name: str, boxes: list[tuple[float, float, float, float, float, float]]) -> str:
+    parts = [f"Block.createCuboidShape({x1}, {y1}, {z1}, {x2}, {y2}, {z2})" for x1, y1, z1, x2, y2, z2 in boxes]
+    expr = "VoxelShapes.union(" + ", ".join(parts) + ")" if len(parts) > 1 else parts[0]
+    return f"    private static final VoxelShape {shape_name} = {expr};"
+
+
 def _copy_tree_if_exists(src: Path, dest: Path):
     if src.exists():
         shutil.copytree(src, dest, dirs_exist_ok=True)
@@ -75,7 +280,14 @@ def _id_ctor(mod: "Mod", namespace_expr: str, path_expr: str) -> str:
 def _blocks_with_block_entities(mod: "Mod") -> list:
     return [
         block for block in mod._blocks
-        if block.has_block_entity or "on_tick" in block.get_hooks()
+        if block.has_block_entity or getattr(block, "uses_block_data", False) or "on_tick" in block.get_hooks()
+    ]
+
+
+def _blocks_requiring_cutout(mod: "Mod") -> list:
+    return [
+        block for block in mod._blocks
+        if (not block.opaque) or bool(getattr(block, "emissive_texture", ""))
     ]
 
 
@@ -107,9 +319,11 @@ def generate_fabric_project(mod: "Mod", project_dir: Path):
     transpiler = JavaTranspiler(_fabric_api_map_for_version(mod.minecraft_version))
 
     _write_main_class(mod, java_root, pkg)
+    _write_client_class(mod, java_root, pkg)
     _write_mod_blocks(mod, java_root, pkg)
     _write_mod_block_entities(mod, java_root, pkg)
     _write_mod_items(mod, java_root, pkg)
+    _write_mod_creative_tabs(mod, java_root, pkg)
     _write_mod_entities(mod, java_root, pkg)
     _write_block_classes(mod, java_root, pkg, transpiler)
     _write_item_classes(mod, java_root, pkg, transpiler)
@@ -133,6 +347,7 @@ def _write_main_class(mod: "Mod", java_root: Path, pkg: str):
     has_blocks = bool(mod._blocks)
     has_block_entities = bool(_blocks_with_block_entities(mod))
     has_items = bool(mod._items)
+    has_creative_tabs = bool(mod._creative_tabs)
     has_entities = bool(mod._entities)
     has_events = bool(mod._events)
     has_commands = bool(mod._commands)
@@ -144,6 +359,8 @@ def _write_main_class(mod: "Mod", java_root: Path, pkg: str):
         reg_lines.append(f"        ModBlockEntities.register();")
     if has_items:
         reg_lines.append(f"        ModItems.register();")
+    if has_creative_tabs:
+        reg_lines.append(f"        ModCreativeTabs.register();")
     if has_entities:
         reg_lines.append(f"        ModEntities.register();")
     if has_events:
@@ -182,6 +399,29 @@ public class {class_name} implements ModInitializer {{
     @Override
     public void onInitialize() {{
 {chr(10).join(reg_lines)}
+    }}
+}}
+"""
+    _write_text(java_root / f"{class_name}.java", src)
+
+
+def _write_client_class(mod: "Mod", java_root: Path, pkg: str):
+    cutout_blocks = _blocks_requiring_cutout(mod)
+    if not cutout_blocks:
+        return
+    class_name = f"{to_pascal(mod.mod_id)}Client"
+    src = f"""\
+package {pkg};
+
+import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.blockrenderlayer.v1.BlockRenderLayerMap;
+import net.minecraft.client.render.RenderLayer;
+
+public class {class_name} implements ClientModInitializer {{
+
+    @Override
+    public void onInitializeClient() {{
+{chr(10).join([f"        BlockRenderLayerMap.INSTANCE.putBlock(ModBlocks.{block.block_id.upper()}, RenderLayer.getCutout());" for block in cutout_blocks])}
     }}
 }}
 """
@@ -339,6 +579,71 @@ public class ModItems {{
     _write_text(java_root / "ModItems.java", src)
 
 
+def _item_lookup_expr(mod: "Mod", item_ref: str) -> str:
+    ref = (item_ref or "").strip()
+    if not ref:
+        return "net.minecraft.item.Items.AIR"
+    if ":" in ref:
+        namespace, path = ref.split(":", 1)
+    else:
+        namespace, path = mod.mod_id, ref
+    for item in mod._items:
+        if namespace == mod.mod_id and item.item_id == path:
+            return f"ModItems.{item.item_id.upper()}"
+    namespace_expr = f"\"{namespace}\""
+    path_expr = f"\"{path}\""
+    return f"Registries.ITEM.get({_id_ctor(mod, namespace_expr, path_expr)})"
+
+
+def _write_mod_creative_tabs(mod: "Mod", java_root: Path, pkg: str):
+    if not mod._creative_tabs:
+        return
+
+    class_name = to_pascal(mod.mod_id)
+    registrations = []
+    for tab in mod._creative_tabs:
+        const_name = tab.tab_id.replace("/", "_").upper()
+        title_key = f"itemGroup.{mod.mod_id}.{tab.tab_id.replace('/', '.')}"
+        entry_lines = [
+            f"                entries.add({_item_lookup_expr(mod, item_ref)});"
+            for item_ref in tab.items
+        ] or ["                // No explicit items"]
+        registrations.append(
+            f"""    public static final ItemGroup {const_name} = Registry.register(
+        Registries.ITEM_GROUP,
+        {_id_ctor(mod, f"{class_name}.MOD_ID", f'"{tab.tab_id}"')},
+        FabricItemGroup.builder()
+            .displayName(Text.translatable("{title_key}"))
+            .icon(() -> new ItemStack({_item_lookup_expr(mod, tab.icon_item)}))
+            .entries((displayContext, entries) -> {{
+{chr(10).join(entry_lines)}
+            }})
+            .build()
+    );"""
+        )
+
+    src = f"""\
+package {pkg};
+
+import net.fabricmc.fabric.api.itemgroup.v1.FabricItemGroup;
+import net.minecraft.util.Identifier;
+import net.minecraft.item.ItemGroup;
+import net.minecraft.item.ItemStack;
+import net.minecraft.registry.Registries;
+import net.minecraft.registry.Registry;
+import net.minecraft.text.Text;
+
+public class ModCreativeTabs {{
+{chr(10).join(registrations)}
+
+    public static void register() {{
+        // Creative tabs are registered via static fields above.
+    }}
+}}
+"""
+    _write_text(java_root / "ModCreativeTabs.java", src)
+
+
 def _write_mod_entities(mod: "Mod", java_root: Path, pkg: str):
     if not mod._entities:
         return
@@ -419,7 +724,7 @@ def _write_block_classes(mod: "Mod", java_root: Path, pkg: str, transpiler: Java
 
     for block in mod._blocks:
         _write_single_block(mod, block, block_dir, pkg, transpiler)
-        if block.has_block_entity or "on_tick" in block.get_hooks():
+        if block.has_block_entity or getattr(block, "uses_block_data", False) or "on_tick" in block.get_hooks():
             _write_single_block_entity(mod, block, block_entity_dir, pkg, transpiler)
 
 
@@ -427,13 +732,17 @@ def _write_single_block(mod, block, block_dir: Path, pkg: str, transpiler: JavaT
     cn = block.get_class_name()
     pkg_block = f"{pkg}.block"
     hooks = block.get_hooks()
-    has_block_entity = block.has_block_entity or "on_tick" in hooks
+    has_block_entity = block.has_block_entity or getattr(block, "uses_block_data", False) or "on_tick" in hooks
+    uses_rotation = getattr(block, "variable_rotation", False)
+    uses_model_shapes = uses_rotation or getattr(block, "model_collision", False)
+    shape_boxes = _model_boxes_for_block(Path.cwd(), mod, block) if uses_model_shapes else {}
+    has_shape_boxes = bool(shape_boxes)
 
     # Build FabricBlockSettings chain
     settings_chain = (
         f"FabricBlockSettings.create()"
         f".strength({block.hardness}f, {block.resistance}f)"
-        f".luminance(state -> {block.luminance})"
+        f".luminance(state -> {_block_light_level(block)})"
         f".slipperiness({block.slipperiness}f)"
         f".sounds({_SOUND_MAP.get(block.sound_group, 'BlockSoundGroup.STONE')})"
     )
@@ -443,6 +752,16 @@ def _write_single_block(mod, block, block_dir: Path, pkg: str, transpiler: JavaT
         settings_chain += ".requiresTool()"
     if not block.opaque:
         settings_chain += ".nonOpaque()"
+
+    shape_fields = []
+    if has_shape_boxes:
+        if uses_rotation:
+            for facing in ("north", "east", "south", "west"):
+                if facing in shape_boxes:
+                    shape_fields.append(_fabric_shape_code(f"SHAPE_{facing.upper()}", shape_boxes[facing]))
+        elif "default" in shape_boxes:
+            shape_fields.append(_fabric_shape_code("SHAPE_DEFAULT", shape_boxes["default"]))
+    shape_fields_str = "\n".join(shape_fields)
 
     # Generate hook methods
     method_blocks = []
@@ -455,6 +774,8 @@ def _write_single_block(mod, block, block_dir: Path, pkg: str, transpiler: JavaT
     @Override
     public ActionResult onUse(BlockState state, World world, BlockPos pos,
                                PlayerEntity player, Hand hand, BlockHitResult hit) {{
+        ItemStack stack = player.getStackInHand(hand);
+        {f"{cn}BlockEntity blockEntity = world.getBlockEntity(pos) instanceof {cn}BlockEntity be ? be : null;" if has_block_entity else ""}
         BlockPos soundPos = pos;
 {body}
         return ActionResult.SUCCESS;
@@ -469,6 +790,7 @@ def _write_single_block(mod, block, block_dir: Path, pkg: str, transpiler: JavaT
     public void onPlaced(World world, BlockPos pos, BlockState state,
                          @Nullable LivingEntity placer, ItemStack itemStack) {{
         PlayerEntity player = placer instanceof PlayerEntity ? (PlayerEntity) placer : null;
+        {f"{cn}BlockEntity blockEntity = world.getBlockEntity(pos) instanceof {cn}BlockEntity be ? be : null;" if has_block_entity else ""}
         BlockPos soundPos = pos;
 {body}
     }}""")
@@ -480,6 +802,7 @@ def _write_single_block(mod, block, block_dir: Path, pkg: str, transpiler: JavaT
         method_blocks.append(f"""\
     @Override
     public void onBreak(World world, BlockPos pos, BlockState state, PlayerEntity player) {{
+        {f"{cn}BlockEntity blockEntity = world.getBlockEntity(pos) instanceof {cn}BlockEntity be ? be : null;" if has_block_entity else ""}
         BlockPos soundPos = pos;
 {body}
         super.onBreak(world, pos, state, player);
@@ -489,6 +812,75 @@ def _write_single_block(mod, block, block_dir: Path, pkg: str, transpiler: JavaT
     extra_imports = ""
     base_class = "Block"
     extra_methods = ""
+    state_members = ""
+    state_methods = ""
+    if uses_rotation:
+        state_members = """
+    public static final DirectionProperty FACING = Properties.HORIZONTAL_FACING;
+"""
+        constructor_default_state = f"""
+        setDefaultState(getStateManager().getDefaultState().with(FACING, Direction.NORTH));"""
+        placement_return = "        return getDefaultState().with(FACING, ctx.getHorizontalPlayerFacing().getOpposite());"
+        shape_selector = "state.get(FACING).asString().toUpperCase()"
+        outline_shape_expr = (
+            "switch (state.get(FACING)) {\n"
+            "            case NORTH -> SHAPE_NORTH;\n"
+            "            case EAST -> SHAPE_EAST;\n"
+            "            case SOUTH -> SHAPE_SOUTH;\n"
+            "            case WEST -> SHAPE_WEST;\n"
+            "            default -> VoxelShapes.fullCube();\n"
+            "        }"
+            if has_shape_boxes
+            else "super.getOutlineShape(state, world, pos, context)"
+        )
+        collision_shape_expr = (
+            "switch (state.get(FACING)) {\n"
+            "            case NORTH -> SHAPE_NORTH;\n"
+            "            case EAST -> SHAPE_EAST;\n"
+            "            case SOUTH -> SHAPE_SOUTH;\n"
+            "            case WEST -> SHAPE_WEST;\n"
+            "            default -> VoxelShapes.fullCube();\n"
+            "        }"
+            if has_shape_boxes
+            else "super.getCollisionShape(state, world, pos, context)"
+        )
+        state_methods = f"""
+    @Override
+    protected void appendProperties(StateManager.Builder<Block, BlockState> builder) {{
+        builder.add(FACING);
+    }}
+
+    @Override
+    public BlockState getPlacementState(ItemPlacementContext ctx) {{
+{placement_return}
+    }}
+
+    @Override
+    public VoxelShape getOutlineShape(BlockState state, BlockView world, BlockPos pos, ShapeContext context) {{
+        return {outline_shape_expr};
+    }}"""
+        if getattr(block, "model_collision", False) and has_shape_boxes and block.collidable:
+            state_methods += f"""
+
+    @Override
+    public VoxelShape getCollisionShape(BlockState state, BlockView world, BlockPos pos, ShapeContext context) {{
+        return {collision_shape_expr};
+    }}"""
+    else:
+        constructor_default_state = ""
+        if has_shape_boxes:
+            state_methods += """
+    @Override
+    public VoxelShape getOutlineShape(BlockState state, BlockView world, BlockPos pos, ShapeContext context) {
+        return SHAPE_DEFAULT;
+    }"""
+        if getattr(block, "model_collision", False) and has_shape_boxes and block.collidable:
+            state_methods += """
+
+    @Override
+    public VoxelShape getCollisionShape(BlockState state, BlockView world, BlockPos pos, ShapeContext context) {
+        return SHAPE_DEFAULT;
+    }"""
     if has_block_entity:
         base_class = "BlockWithEntity"
         extra_imports = f"""
@@ -540,22 +932,31 @@ package {pkg_block};
 import net.fabricmc.fabric.api.object.builder.v1.block.FabricBlockSettings;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
+import net.minecraft.block.ShapeContext;
 import net.minecraft.sound.BlockSoundGroup;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
+import net.minecraft.item.ItemPlacementContext;
 import net.minecraft.text.Text;
 import net.minecraft.util.ActionResult;
 import net.minecraft.util.Hand;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Direction;
 import net.minecraft.world.World;
+import net.minecraft.world.BlockView;
 import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.registry.Registries;
+import net.minecraft.state.StateManager;
+import net.minecraft.state.property.DirectionProperty;
+import net.minecraft.state.property.Properties;
 import net.minecraft.util.Identifier;
+import net.minecraft.util.shape.VoxelShape;
+import net.minecraft.util.shape.VoxelShapes;
 import org.jetbrains.annotations.Nullable;
 import java.util.Set;
 {extra_imports}
@@ -564,12 +965,16 @@ import java.util.Set;
  * {block.get_display_name()} — generated by fabricpy
  */
 public class {cn} extends {base_class} {{
+{state_members}
+{shape_fields_str}
 
     public {cn}() {{
         super({settings_chain});
+{constructor_default_state}
     }}
 
 {methods_str}
+{state_methods}
 {extra_methods}
 }}
 """
@@ -579,6 +984,146 @@ public class {cn} extends {base_class} {{
 def _write_single_block_entity(mod, block, block_entity_dir: Path, pkg: str, transpiler: JavaTranspiler):
     cn = block.get_class_name()
     hooks = block.get_hooks()
+    data_methods = ""
+    data_imports = """
+import net.minecraft.nbt.NbtCompound;
+import net.minecraft.block.Block;"""
+    if mod.minecraft_version == "1.21.1":
+        data_imports += """
+import net.minecraft.registry.RegistryWrapper;"""
+        data_methods = """
+    private NbtCompound fabricpyData = new NbtCompound();
+
+    public String getStringData(String key) {
+        return fabricpyData.getString(key);
+    }
+
+    public void setStringData(String key, String value) {
+        fabricpyData.putString(key, value);
+        markDirty();
+    }
+
+    public int getIntData(String key) {
+        return fabricpyData.getInt(key);
+    }
+
+    public void setIntData(String key, int value) {
+        fabricpyData.putInt(key, value);
+        markDirty();
+    }
+
+    public boolean getBoolData(String key) {
+        return fabricpyData.getBoolean(key);
+    }
+
+    public void setBoolData(String key, boolean value) {
+        fabricpyData.putBoolean(key, value);
+        markDirty();
+    }
+
+    public double getDoubleData(String key) {
+        return fabricpyData.getDouble(key);
+    }
+
+    public void setDoubleData(String key, double value) {
+        fabricpyData.putDouble(key, value);
+        markDirty();
+    }
+
+    public boolean hasData(String key) {
+        return fabricpyData.contains(key);
+    }
+
+    public void removeData(String key) {
+        fabricpyData.remove(key);
+        markDirty();
+    }
+
+    public void syncData() {
+        markDirty();
+        if (world != null) {
+            world.updateListeners(pos, getCachedState(), getCachedState(), Block.NOTIFY_LISTENERS);
+        }
+    }
+
+    @Override
+    protected void writeNbt(NbtCompound nbt, RegistryWrapper.WrapperLookup registries) {
+        super.writeNbt(nbt, registries);
+        nbt.put("fabricpy_data", fabricpyData.copy());
+    }
+
+    @Override
+    public void readNbt(NbtCompound nbt, RegistryWrapper.WrapperLookup registries) {
+        super.readNbt(nbt, registries);
+        this.fabricpyData = nbt.contains("fabricpy_data") ? nbt.getCompound("fabricpy_data").copy() : new NbtCompound();
+    }"""
+    else:
+        data_methods = """
+    private NbtCompound fabricpyData = new NbtCompound();
+
+    public String getStringData(String key) {
+        return fabricpyData.getString(key);
+    }
+
+    public void setStringData(String key, String value) {
+        fabricpyData.putString(key, value);
+        markDirty();
+    }
+
+    public int getIntData(String key) {
+        return fabricpyData.getInt(key);
+    }
+
+    public void setIntData(String key, int value) {
+        fabricpyData.putInt(key, value);
+        markDirty();
+    }
+
+    public boolean getBoolData(String key) {
+        return fabricpyData.getBoolean(key);
+    }
+
+    public void setBoolData(String key, boolean value) {
+        fabricpyData.putBoolean(key, value);
+        markDirty();
+    }
+
+    public double getDoubleData(String key) {
+        return fabricpyData.getDouble(key);
+    }
+
+    public void setDoubleData(String key, double value) {
+        fabricpyData.putDouble(key, value);
+        markDirty();
+    }
+
+    public boolean hasData(String key) {
+        return fabricpyData.contains(key);
+    }
+
+    public void removeData(String key) {
+        fabricpyData.remove(key);
+        markDirty();
+    }
+
+    public void syncData() {
+        markDirty();
+        if (world != null) {
+            world.updateListeners(pos, getCachedState(), getCachedState(), Block.NOTIFY_LISTENERS);
+        }
+    }
+
+    @Override
+    public void writeNbt(NbtCompound nbt) {
+        super.writeNbt(nbt);
+        nbt.put("fabricpy_data", fabricpyData.copy());
+    }
+
+    @Override
+    public void readNbt(NbtCompound nbt) {
+        super.readNbt(nbt);
+        this.fabricpyData = nbt.contains("fabricpy_data") ? nbt.getCompound("fabricpy_data").copy() : new NbtCompound();
+    }"""
     tick_method = ""
     if "on_tick" in hooks:
         body = transpiler.transpile_method(
@@ -594,6 +1139,7 @@ def _write_single_block_entity(mod, block, block_entity_dir: Path, pkg: str, tra
 package {pkg}.blockentity;
 
 import net.minecraft.block.BlockState;
+{data_imports}
 import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
@@ -606,6 +1152,7 @@ public class {cn}BlockEntity extends BlockEntity {{
     public {cn}BlockEntity(BlockPos pos, BlockState state) {{
         super(ModBlockEntities.{block.block_id.upper()}, pos, state);
     }}
+{data_methods}
 {tick_method}
 }}
 """
@@ -812,9 +1359,36 @@ def _write_events(mod: "Mod", java_root: Path, pkg: str, transpiler: JavaTranspi
     imports.add("import net.minecraft.world.World;")
     imports.add("import net.minecraft.util.math.BlockPos;")
     imports.add("import java.util.Set;")
+    imports.add("import java.util.HashMap;")
+    imports.add("import java.util.Map;")
+    imports.add("import java.util.UUID;")
 
     for ev in mod._events:
         ev_name = ev["event"]
+        if ev_name == "player_offhand_change":
+            imports.add("import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;")
+            imports.add("import net.minecraft.util.Hand;")
+            body = transpiler.transpile_method(ev["source"])
+            register_blocks.append(f"""\
+        ServerTickEvents.END_SERVER_TICK.register((server) -> {{
+            for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {{
+                UUID playerId = player.getUuid();
+                ItemStack stack = player.getOffHandStack();
+                String previousOffhandItemId = LAST_OFFHAND_ITEM.getOrDefault(playerId, "");
+                int previousOffhandCount = LAST_OFFHAND_COUNT.getOrDefault(playerId, 0);
+                String currentOffhandItemId = Registries.ITEM.getId(stack.getItem()).toString();
+                int currentOffhandCount = stack.getCount();
+                if (!currentOffhandItemId.equals(previousOffhandItemId) || currentOffhandCount != previousOffhandCount) {{
+                    ServerWorld world = player.getServerWorld();
+                    Hand hand = Hand.OFF_HAND;
+                    BlockPos soundPos = player.getBlockPos();
+{body}
+                }}
+                LAST_OFFHAND_ITEM.put(playerId, currentOffhandItemId);
+                LAST_OFFHAND_COUNT.put(playerId, currentOffhandCount);
+            }}
+        }});""")
+            continue
         ev_info = FABRIC_EVENT_MAP.get(ev_name)
         if not ev_info:
             register_blocks.append(f"        // Unknown event: {ev_name}")
@@ -834,6 +1408,8 @@ package {pkg}.event;
  * Event registrations for {mod.name}.
  */
 public class ModEvents {{
+    private static final Map<UUID, String> LAST_OFFHAND_ITEM = new HashMap<>();
+    private static final Map<UUID, Integer> LAST_OFFHAND_COUNT = new HashMap<>();
 
     public static void register() {{
 {chr(10).join(register_blocks)}
@@ -992,6 +1568,8 @@ def _write_resources(mod: "Mod", res_root: Path, pkg: str):
             "java": ">=17",
         },
     }
+    if _blocks_requiring_cutout(mod):
+        fabric_mod["entrypoints"]["client"] = [f"{pkg}.{to_pascal(mod.mod_id)}Client"]
     if mod._mixins:
         fabric_mod["mixins"] = [f"{mod.mod_id}.mixins.json"]
     _write_text(res_root / "fabric.mod.json", json.dumps(fabric_mod, indent=2))
@@ -1019,6 +1597,17 @@ def _write_resources(mod: "Mod", res_root: Path, pkg: str):
         lang[f"item.{mod.mod_id}.{it.item_id}"] = it.get_display_name()
     for entity in mod._entities:
         lang[f"entity.{mod.mod_id}.{entity.entity_id}"] = entity.get_display_name()
+    for tab in mod._creative_tabs:
+        lang[f"itemGroup.{mod.mod_id}.{tab.tab_id.replace('/', '.')}"] = tab.title
+    for advancement in mod._advancements:
+        advancement_key = advancement["id"].replace("/", ".")
+        display = advancement["data"].get("display", {})
+        if isinstance(display.get("title"), str):
+            lang[f"advancement.{mod.mod_id}.{advancement_key}.title"] = display["title"]
+            display["title"] = {"translate": f"advancement.{mod.mod_id}.{advancement_key}.title"}
+        if isinstance(display.get("description"), str):
+            lang[f"advancement.{mod.mod_id}.{advancement_key}.description"] = display["description"]
+            display["description"] = {"translate": f"advancement.{mod.mod_id}.{advancement_key}.description"}
     for sound in mod._sounds:
         if sound.get("subtitle_text"):
             key = f"subtitles.{mod.mod_id}.{sound['id'].replace('/', '.')}"
@@ -1036,11 +1625,16 @@ def _write_resources(mod: "Mod", res_root: Path, pkg: str):
     item_models_dir.mkdir(parents=True, exist_ok=True)
 
     for block in mod._blocks:
-        blockstate = block.blockstate or {
-            "variants": {
-                "": {"model": f"{mod.mod_id}:block/{block.block_id}"}
-            }
-        }
+        default_model_id = _normalize_block_model_id(mod.mod_id, "", block.block_id)
+        blockstate = (
+            _generated_rotation_blockstate(mod.mod_id, block)
+            if getattr(block, "variable_rotation", False)
+            else (block.blockstate or {
+                "variants": {
+                    "": {"model": f"{mod.mod_id}:block/{block.block_id}"}
+                }
+            })
+        )
         block_model = block.model or {
             "parent": "minecraft:block/cube_all",
             "textures": block.textures or {
@@ -1050,6 +1644,26 @@ def _write_resources(mod: "Mod", res_root: Path, pkg: str):
         block_item_model = block.item_model or {
             "parent": f"{mod.mod_id}:block/{block.block_id}"
         }
+        emissive_ref = _resource_ref(mod.mod_id, block.emissive_texture, "block", f"{block.block_id}_emissive")
+        if getattr(block, "emissive_texture", ""):
+            overlay_model_id = f"{mod.mod_id}:block/{block.block_id}__emissive"
+            base_overlay_model = _load_block_model_data(Path.cwd(), mod, block, default_model_id)
+            if not isinstance(base_overlay_model, dict):
+                base_overlay_model = block_model
+            overlay_model = block.emissive_model or json.loads(json.dumps(base_overlay_model))
+            if isinstance(overlay_model, dict):
+                base_textures = base_overlay_model.get("textures", {}) if isinstance(base_overlay_model, dict) else {}
+                overlay_model["ambientocclusion"] = False
+                overlay_model["textures"] = _overlay_texture_map(
+                    base_textures,
+                    getattr(block, "emissive_textures", {}),
+                    emissive_ref,
+                )
+            blockstate = _append_emissive_overlay_blockstate(blockstate, overlay_model_id)
+            _write_text(
+                block_models_dir / f"{block.block_id}__emissive.json",
+                json.dumps(overlay_model, indent=2),
+            )
         _write_text(
             blockstates_dir / f"{block.block_id}.json",
             json.dumps(blockstate, indent=2),
@@ -1070,6 +1684,14 @@ def _write_resources(mod: "Mod", res_root: Path, pkg: str):
                 "layer0": _resource_ref(mod.mod_id, item.texture, "item", item.item_id)
             }
         }
+        if getattr(item, "emissive_texture", "") and isinstance(item_model, dict):
+            item_model = json.loads(json.dumps(item_model))
+            textures = dict(item_model.get("textures", {}))
+            textures.setdefault(
+                "layer1",
+                _resource_ref(mod.mod_id, item.emissive_texture, "item", f"{item.item_id}_emissive"),
+            )
+            item_model["textures"] = textures
         _write_text(
             item_models_dir / f"{item.item_id}.json",
             json.dumps(item_model, indent=2),
@@ -1081,6 +1703,13 @@ def _write_resources(mod: "Mod", res_root: Path, pkg: str):
         recipe_path = recipes_dir / f"{recipe['id']}.json"
         recipe_path.parent.mkdir(parents=True, exist_ok=True)
         _write_text(recipe_path, json.dumps(recipe["data"], indent=2))
+
+    advancements_dir = res_root / "data" / mod.mod_id / "advancements"
+    advancements_dir.mkdir(parents=True, exist_ok=True)
+    for advancement in mod._advancements:
+        advancement_path = advancements_dir / f"{advancement['id']}.json"
+        advancement_path.parent.mkdir(parents=True, exist_ok=True)
+        _write_text(advancement_path, json.dumps(advancement["data"], indent=2))
 
     dimension_types_dir = res_root / "data" / mod.mod_id / "dimension_type"
     dimension_types_dir.mkdir(parents=True, exist_ok=True)

@@ -58,6 +58,8 @@ class Item(metaclass=ItemMeta):
 
     # ---- Assets ----
     texture: str = ""                   # Shortcut for generated item layer0
+    emissive_texture: str = ""          # Optional overlay texture for emissive parts
+    emissive_level: int = 0             # 1-255 authoring value, currently advisory for item overlays
     textures: dict = {}                 # Full item model texture map override
     model: dict | None = None           # Full item model JSON override
 

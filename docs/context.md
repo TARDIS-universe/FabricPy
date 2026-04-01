@@ -32,6 +32,15 @@ Player helpers:
 - `ctx.player.get_pos_x()`
 - `ctx.player.get_pos_y()`
 - `ctx.player.get_pos_z()`
+- `ctx.player.get_main_hand_item_id()`
+- `ctx.player.get_main_hand_count()`
+- `ctx.player.get_offhand_item_id()`
+- `ctx.player.get_offhand_count()`
+- `ctx.player.consume_main_hand_item(count)`
+- `ctx.player.set_main_hand_item(item_id, count)`
+- `ctx.player.has_item(item_id)`
+- `ctx.player.count_item(item_id)`
+- `ctx.player.add_cooldown(item_id, ticks)`
 
 World helpers:
 
@@ -40,6 +49,13 @@ World helpers:
 - `ctx.world.play_sound(sound_id, volume, pitch)`
 - `ctx.world.explode(x, y, z, power)`
 - `ctx.world.set_block(x, y, z, block_id)`
+- `ctx.world.set_block_self(block_id)`
+- `ctx.world.break_block(x, y, z, drop)`
+- `ctx.world.break_self(drop)`
+- `ctx.world.get_block_id(x, y, z)`
+- `ctx.world.get_self_block_id()`
+- `ctx.world.is_air(x, y, z)`
+- `ctx.world.is_self_air()`
 - `ctx.world.set_block_in_dimension(dimension_id, x, y, z, block_id)`
 - `ctx.world.fill_in_dimension(dimension_id, x1, y1, z1, x2, y2, z2, block_id, mode)`
 - `ctx.world.place_structure(dimension_id, structure_id, x, y, z)`
@@ -71,6 +87,15 @@ Raw context values that can appear depending on the hook or event:
 - `ctx.state`
 - `ctx.hand`
 - `ctx.stack`
+- `ctx.stack.get_item_id()`
+- `ctx.stack.get_count()`
+- `ctx.stack.get_texture()`
+- `ctx.stack.texture_change(texture_id)`
+- `ctx.stack.get_model()`
+- `ctx.stack.model_change(model_id)`
+- `ctx.stack.decrement(count)`
+- `ctx.stack.increment(count)`
+- `ctx.stack.is_of(item_id)`
 - `ctx.message`
 - `ctx.entity`
 - `ctx.block_entity`
@@ -91,6 +116,21 @@ Block entity helpers:
 
 - `ctx.block_entity`
 - `ctx.block_entity.mark_dirty()`
+- `ctx.block_entity.get_string(key)`
+- `ctx.block_entity.get_texture()`
+- `ctx.block_entity.texture_change(texture_id)`
+- `ctx.block_entity.get_model()`
+- `ctx.block_entity.model_change(model_id)`
+- `ctx.block_entity.set_string(key, value)`
+- `ctx.block_entity.get_int(key)`
+- `ctx.block_entity.set_int(key, value)`
+- `ctx.block_entity.get_bool(key)`
+- `ctx.block_entity.set_bool(key, value)`
+- `ctx.block_entity.get_double(key)`
+- `ctx.block_entity.set_double(key, value)`
+- `ctx.block_entity.has(key)`
+- `ctx.block_entity.remove(key)`
+- `ctx.block_entity.sync()`
 
 Notes:
 
@@ -103,3 +143,41 @@ Notes:
 - dimension ids should be full ids like `"minecraft:overworld"` or `"mymod:pocket"`
 - cross-dimension block and structure helpers use Minecraft commands under the hood
 - `ctx.entity` and `ctx.block_entity` are also exposed as the raw generated Java-backed objects, so advanced calls can be emitted if you use the loader method names directly
+- `ctx.stack.texture_change(...)` and `ctx.stack.model_change(...)` store appearance override keys on the item stack data
+- `ctx.block_entity.texture_change(...)` and `ctx.block_entity.model_change(...)` store appearance override keys in persistent block data
+- those appearance helpers are state storage helpers, not full generic hot-reload renderer mutation across all block and item models
+
+Example block-data workflow:
+
+```python
+@mod.register
+class Scanner(mc.Block):
+    block_id = "scanner"
+    uses_block_data = True
+
+    @mc.on_use
+    def on_use(self, ctx):
+        if ctx.stack.is_of("minecraft:red_dye"):
+            ctx.block_entity.set_string("color", "red")
+            ctx.block_entity.set_int("uses", ctx.block_entity.get_int("uses") + 1)
+            ctx.block_entity.sync()
+            ctx.player.consume_main_hand_item(1)
+```
+
+That pattern is good for persistent logic and state. For actual visual changes, swap to another compiled block or variant block id rather than expecting arbitrary runtime texture mutation.
+
+Example appearance data workflow:
+
+```python
+@mod.register
+class Scanner(mc.Block):
+    block_id = "scanner"
+    uses_block_data = True
+
+    @mc.on_use
+    def on_use(self, ctx):
+        if ctx.stack.is_of("minecraft:red_dye"):
+            ctx.block_entity.texture_change("playtime:block/scanner_red")
+            ctx.block_entity.model_change("playtime:block/scanner_red")
+            ctx.block_entity.sync()
+```

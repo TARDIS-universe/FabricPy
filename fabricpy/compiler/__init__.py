@@ -24,8 +24,6 @@ def compile_mod(mod: "Mod", output_dir: str = "./dist", clean: bool = False):
     """
     from fabricpy.compiler.fabric_gen import generate_fabric_project
     from fabricpy.compiler.forge_gen import generate_forge_project
-    from fabricpy.compiler.quilt_gen import generate_quilt_project
-    from fabricpy.compiler.neoforge_gen import generate_neoforge_project
     from fabricpy.compiler.gradle_runner import run_build
 
     _validate(mod)
@@ -46,7 +44,9 @@ def compile_mod(mod: "Mod", output_dir: str = "./dist", clean: bool = False):
     print(f"  Commands: {len(mod._commands)}")
     print(f"  Mixins:   {len(mod._mixins)}")
     print(f"  Recipes:  {len(mod._recipes)}")
+    print(f"  Advancements: {len(mod._advancements)}")
     print(f"  Sounds:   {len(mod._sounds)}")
+    print(f"  Creative Tabs: {len(mod._creative_tabs)}")
     print(f"  Dimension Types: {len(mod._dimension_types)}")
     print(f"  Dimensions:      {len(mod._dimensions)}")
     print(f"  Structures:      {len(mod._structures)}")
@@ -66,18 +66,6 @@ def compile_mod(mod: "Mod", output_dir: str = "./dist", clean: bool = False):
         success = run_build(forge_dir, mod.minecraft_version, "forge", clean=clean, output_dir=out)
         results["forge"] = success
 
-    if "quilt" in loaders:
-        quilt_dir = gen_root / f"{mod.mod_id}-quilt"
-        generate_quilt_project(mod, quilt_dir)
-        success = run_build(quilt_dir, mod.minecraft_version, "quilt", clean=clean, output_dir=out)
-        results["quilt"] = success
-
-    if "neoforge" in loaders:
-        neoforge_dir = gen_root / f"{mod.mod_id}-neoforge"
-        generate_neoforge_project(mod, neoforge_dir)
-        success = run_build(neoforge_dir, mod.minecraft_version, "neoforge", clean=clean, output_dir=out)
-        results["neoforge"] = success
-
     print()
     print("=" * 50)
     print(f"[fabricpy] Compilation complete for {mod.name}")
@@ -93,8 +81,8 @@ def _resolve_loaders(loader: str, minecraft_version: str) -> list[str]:
     loader = loader.lower().strip()
 
     supported_by_version = {
-        "1.20.1": ["fabric", "quilt", "forge"],
-        "1.21.1": ["fabric", "quilt", "forge", "neoforge"],
+        "1.20.1": ["fabric", "forge"],
+        "1.21.1": ["fabric", "forge"],
     }
     supported = supported_by_version.get(minecraft_version)
     if not supported:
@@ -105,7 +93,7 @@ def _resolve_loaders(loader: str, minecraft_version: str) -> list[str]:
 
     alias_map = {
         "both": ["fabric", "forge"],
-        "all": list(supported),
+        "all": ["fabric", "forge"],
     }
 
     if loader in alias_map:

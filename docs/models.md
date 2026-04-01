@@ -11,14 +11,20 @@ Repo folders:
 Block Python fields:
 
 - `texture`
+- `emissive_texture`
+- `emissive_level`
 - `textures`
+- `emissive_textures`
 - `model`
+- `emissive_model`
 - `blockstate`
 - `item_model`
 
 Item Python fields:
 
 - `texture`
+- `emissive_texture`
+- `emissive_level`
 - `textures`
 - `model`
 
@@ -31,6 +37,12 @@ Default generation behavior:
 - an item with only `texture = "foo/bar"` gets:
   - a default item model using `minecraft:item/generated`
   - `layer0` set to `<modid>:item/foo/bar`
+- a block with `emissive_texture` gets:
+  - an overlay block model at `<modid>:block/<block_id>__emissive`
+  - an extra blockstate entry pointing at that overlay model
+  - `emissive_level` mapped from `1..255` down to Minecraft light `1..15`
+- an item with `emissive_texture` gets:
+  - a generated `layer1` texture entry in the item model
 
 Reference rules inside JSON:
 
@@ -93,3 +105,22 @@ Common mistake:
 - Python says `texture = "food/pickle"` and you then write a manual item model with `"layer0": "mymod:food/pickle"`
 - that is wrong for item textures
 - the correct texture id is `"mymod:item/food/pickle"`
+
+Current limitation:
+
+- block emissive overlays are supported directly by the generated blockstate/model pipeline
+- item emissive overlays are emitted as a second item model layer, but fully custom fullbright item rendering is still beyond the current Python API
+
+Rotation handling:
+
+- for blocks that use `variable_rotation = True`, author the model facing north
+- `rotation_mode = "wall"` keeps the model upright and applies horizontal facing rotation
+- `rotation_mode = "floor"` tells the compiler to use floor-placement rotation handling for that same north-authored model
+- `wall_model` and `floor_model` are optional source model overrides for those two handling modes
+
+Model-derived shapes:
+
+- when a block model JSON contains plain `elements` cuboids, `fabricpy` can derive outline and optional collision shapes from it
+- set `model_collision = True` on the block to use the model cuboids for collision
+- outline shape also follows those cuboids when the generator can read them
+- advanced per-element model rotations are not converted into voxel math yet

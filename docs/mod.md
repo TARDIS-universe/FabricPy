@@ -10,7 +10,7 @@ Constructor arguments:
 - `description`: short description
 - `authors`: list of author names
 - `minecraft_version`: target Minecraft version, default `1.20.1`
-- `loader`: `fabric`, `quilt`, `forge`, `neoforge`, `both`, or `all`
+- `loader`: `fabric`, `forge`, `both`, or `all`
 - `package`: Java package root, defaults to `com.generated.<mod_id>`
 - `website`: optional homepage URL
 - `license`: license string, default `MIT`
@@ -23,11 +23,23 @@ Main methods:
 - `mod.add_recipe(recipe_id, data)`: register raw recipe JSON
 - `mod.shaped_recipe(recipe_id, result, pattern, key, count=1)`: register a shaped recipe
 - `mod.shapeless_recipe(recipe_id, result, ingredients, count=1)`: register a shapeless recipe
+- `mod.add_advancement(...)`: register an advancement from Python fields
+- `mod.add_advancement_json(advancement_id, data)`: register raw advancement JSON
+- `mod.item_advancement(...)`: register a simple inventory-based advancement
 - `mod.add_sound(sound_id, sounds, subtitle="", replace=False)`: register a sound event for `sounds.json`
+- `mod.creative_tab(tab_id, title, icon_item)`: create a custom creative tab builder
 - `mod.add_dimension_type(type_id, data)`: register a dimension type JSON
 - `mod.add_dimension(dimension_id, dimension_type, generator=None, data=None)`: register a dimension JSON
 - `mod.add_structure(structure_id, nbt_path)`: copy an NBT structure template into the generated datapack
 - `mod.compile(output_dir="./dist", clean=False)`: generate projects and build jars
+
+Useful patterns:
+
+- blocks that need persistent editable state should use `uses_block_data = True`
+- global gameplay hooks such as `player_use_item`, `player_use_block`, `player_tick`, `player_attack_entity`, and `player_interact_entity` are registered through `mod.event(...)`
+- runtime visual changes are currently done by swapping to another compiled block or variant block id, not by arbitrary live texture mutation
+- advancements are emitted into `data/<modid>/advancements/...`
+- creative tab titles are emitted into `assets/<modid>/lang/en_us.json`
 
 Registration styles:
 
@@ -63,6 +75,31 @@ mod = mc.Mod(
 )
 ```
 
+Advancement example:
+
+```python
+mod.item_advancement(
+    advancement_id="story/get_scanner",
+    title="Field Kit",
+    description="Obtain a hand scanner.",
+    icon_item="playtime:hand_scanner",
+    parent="playtime:story/root",
+)
+```
+
+Creative tab example:
+
+```python
+tools_tab = mod.creative_tab(
+    tab_id="tools",
+    title="Playtime Tools",
+    icon_item="playtime:hand_scanner",
+)
+
+tools_tab.item.add("playtime:hand_scanner")
+tools_tab.item.add("minecraft:redstone")
+```
+
 Generated project layout:
 
 - jars are copied to `dist/` by default
@@ -74,7 +111,7 @@ Generated project layout:
 
 Loader matrix:
 
-- `1.20.1`: `fabric`, `quilt`, `forge`
-- `1.21.1`: `fabric`, `quilt`, `forge`, `neoforge`
+- `1.20.1`: `fabric`, `forge`
+- `1.21.1`: `fabric`, `forge`
 - `both`: always means `fabric+forge`
-- `all`: every supported loader for the selected Minecraft version
+- `all`: also resolves to `fabric+forge`

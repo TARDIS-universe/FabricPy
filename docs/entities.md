@@ -52,8 +52,8 @@ Attribute fields:
 
 Current generated Java shape:
 
-- Fabric and Quilt generate a `PathAwareEntity`
-- Forge and NeoForge generate a `PathfinderMob`
+- Fabric generates a `PathAwareEntity`
+- Forge generates a `PathfinderMob`
 - a basic attribute builder is generated from the fields above
 - no default AI goals are generated yet
 

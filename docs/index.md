@@ -6,6 +6,8 @@
 - [items.md](./items.md)
 - [entities.md](./entities.md)
 - [recipes.md](./recipes.md)
+- [advancements.md](./advancements.md)
+- [creative-tabs.md](./creative-tabs.md)
 - [sounds.md](./sounds.md)
 - [dimensions.md](./dimensions.md)
 - [structures.md](./structures.md)

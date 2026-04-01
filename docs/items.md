@@ -41,14 +41,24 @@ Gameplay fields:
 Asset fields:
 
 - `texture`: shortcut for a default generated item model `layer0`
+- `emissive_texture`: optional overlay texture used for emissive parts
+- `emissive_level`: emissive authoring value from `1` to `255`
 - `textures`: full item model texture map override
 - `model`: full item model JSON override
 
 Asset path behavior:
 
 - `texture = "food/pickle"` resolves to `assets/<modid>/textures/item/food/pickle.png`
+- `emissive_texture = "food/pickle_glow"` resolves to `assets/<modid>/textures/item/food/pickle_glow.png`
 - the generated default item model uses `layer0: "<modid>:item/food/pickle"`
+- if `emissive_texture` is set, the generated default item model also adds `layer1`
 - if you provide a manual `model`, you are responsible for writing the correct item texture id yourself
+
+Emissive note:
+
+- item emissive textures are currently emitted as an additional model layer
+- that preserves the separate texture workflow and UV alignment
+- true fullbright item rendering is still not guaranteed across every loader without a custom renderer
 
 Hooks:
 

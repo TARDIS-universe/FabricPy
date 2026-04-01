@@ -15,6 +15,8 @@ Docs:
 - `docs/items.md`
 - `docs/entities.md`
 - `docs/recipes.md`
+- `docs/advancements.md`
+- `docs/creative-tabs.md`
 - `docs/sounds.md`
 - `docs/dimensions.md`
 - `docs/structures.md`
@@ -35,15 +37,31 @@ Those folders are copied into generated loader projects during compile.
 
 Supported matrix:
 
-- `1.20.1`: Fabric, Quilt, Forge
-- `1.21.1`: Fabric, Quilt, Forge, NeoForge
+- `1.20.1`: Fabric, Forge
+- `1.21.1`: Fabric, Forge
 
 Content support now includes:
 
 - blocks
 - items
+- advancements
+- custom creative tabs
 - block entities through `has_block_entity=True` and `@mc.on_tick`
+- persistent block data through `uses_block_data=True`
 - normal entities through `mc.Entity`
+
+The Python ctx surface now also includes:
+
+- persistent block-data helpers on `ctx.block_entity`
+- more inventory and held-item actions on `ctx.player`
+- more per-hook item helpers on `ctx.stack`
+- more global events such as `player_tick`, `player_use_item`, `player_use_block`, `player_attack_entity`, `player_interact_entity`, and `entity_death`
+
+Runtime appearance note:
+
+- block data can drive logic and remember choices
+- arbitrary hot-swapping of a block's texture/model/emissive assets is still not a generic cross-loader runtime feature
+- the reliable current approach is to swap the block to another compiled block or block variant when you want visual changes
 
 JDK selection is version-aware:
 
@@ -53,7 +71,8 @@ JDK selection is version-aware:
 
 Gradle wrapper selection is loader-aware:
 
-- Fabric, Quilt, and NeoForge use Gradle `8.8`
+- Fabric uses Gradle `8.8`
+- Forge `1.20.1` uses Gradle `8.8`
 - Forge `1.21.1` uses Gradle `9.3.0`
 
 

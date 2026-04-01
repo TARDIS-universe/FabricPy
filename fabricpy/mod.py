@@ -9,7 +9,7 @@ Usage:
         description="Bigger on the inside.",
         authors=["DJ"],
         minecraft_version="1.20.1",
-        loader="both",          # "fabric", "quilt", "forge", "neoforge", "both", or "all"
+        loader="both",          # "fabric", "forge", "both", or "all"
     )
 
     mod.register(MyBlock)
@@ -29,6 +29,45 @@ Usage:
 
 import inspect
 from typing import List, Optional, Type
+
+
+class _CreativeTabItems:
+    def __init__(self, tab):
+        self._tab = tab
+
+    def add(self, item_id: str):
+        if not item_id:
+            raise ValueError("item_id is required")
+        self._tab.items.append(item_id)
+        return item_id
+
+
+class CreativeTab:
+    def __init__(self, mod, tab_id: str, title: str, icon_item: str):
+        if not tab_id:
+            raise ValueError("tab_id is required")
+        if not title:
+            raise ValueError("title is required")
+        if not icon_item:
+            raise ValueError("icon_item is required")
+        self.mod = mod
+        self.tab_id = tab_id.replace("\\", "/").strip("/")
+        self.title = title
+        self.icon_item = icon_item
+        self.items: list[str] = []
+        self.item = _CreativeTabItems(self)
+
+    def set_title(self, title: str):
+        if not title:
+            raise ValueError("title is required")
+        self.title = title
+        return title
+
+    def set_icon(self, item_id: str):
+        if not item_id:
+            raise ValueError("item_id is required")
+        self.icon_item = item_id
+        return item_id
 
 
 class Mod:
@@ -53,7 +92,7 @@ class Mod:
             description:        Short description shown in mod list
             authors:            List of author names
             minecraft_version:  Target MC version (default: "1.20.1")
-            loader:             "fabric", "quilt", "forge", "neoforge", "both", or "all"
+            loader:             "fabric", "forge", "both", or "all"
             package:            Java package root (default: com.generated.<mod_id>)
             website:            Optional homepage URL
             license:            License identifier (default: "MIT")
@@ -81,7 +120,9 @@ class Mod:
         self._events: list = []
         self._commands: list = []
         self._recipes: list = []
+        self._advancements: list = []
         self._sounds: list = []
+        self._creative_tabs: list = []
         self._dimension_types: list = []
         self._dimensions: list = []
         self._structures: list = []
@@ -159,6 +200,91 @@ class Mod:
         return data
 
     # ------------------------------------------------------------------ #
+    # Advancement system
+    # ------------------------------------------------------------------ #
+
+    def add_advancement(self, advancement_id: str, title: str, description: str, icon_item: str, parent: Optional[str] = None,
+                        criteria: Optional[dict] = None, rewards: Optional[dict] = None, background: str = "",
+                        frame: str = "task", show_toast: bool = True, announce_to_chat: bool = True, hidden: bool = False):
+        if not advancement_id:
+            raise ValueError("advancement_id is required")
+        if not title:
+            raise ValueError("title is required")
+        if not description:
+            raise ValueError("description is required")
+        if not icon_item:
+            raise ValueError("icon_item is required")
+
+        data = {
+            "display": {
+                "icon": {"item": icon_item},
+                "title": title,
+                "description": description,
+                "frame": frame,
+                "show_toast": show_toast,
+                "announce_to_chat": announce_to_chat,
+                "hidden": hidden,
+            },
+            "criteria": criteria or {
+                "fabricpy_manual": {
+                    "trigger": "minecraft:impossible"
+                }
+            },
+        }
+        if parent:
+            data["parent"] = parent
+        if rewards:
+            data["rewards"] = rewards
+        if background:
+            data["display"]["background"] = background
+
+        self._advancements.append({
+            "id": advancement_id.replace("\\", "/").strip("/"),
+            "data": data,
+        })
+        return data
+
+    def add_advancement_json(self, advancement_id: str, data: dict):
+        if not advancement_id:
+            raise ValueError("advancement_id is required")
+        if not isinstance(data, dict):
+            raise TypeError("advancement data must be a dict")
+        self._advancements.append({
+            "id": advancement_id.replace("\\", "/").strip("/"),
+            "data": data,
+        })
+        return data
+
+    def item_advancement(self, advancement_id: str, title: str, description: str, icon_item: str, trigger_item: Optional[str] = None,
+                         parent: Optional[str] = None, rewards: Optional[dict] = None, background: str = "",
+                         frame: str = "task", show_toast: bool = True, announce_to_chat: bool = True, hidden: bool = False):
+        item_id = trigger_item or icon_item
+        criteria = {
+            "has_item": {
+                "trigger": "minecraft:inventory_changed",
+                "conditions": {
+                    "items": [
+                        {"items": [item_id]}
+                    ]
+                }
+            }
+        }
+        return self.add_advancement(
+            advancement_id=advancement_id,
+            title=title,
+            description=description,
+            icon_item=icon_item,
+            parent=parent,
+            criteria=criteria,
+            rewards=rewards,
+            background=background,
+            frame=frame,
+            show_toast=show_toast,
+            announce_to_chat=announce_to_chat,
+            hidden=hidden,
+        )
+
+    # ------------------------------------------------------------------ #
     # Sound system
     # ------------------------------------------------------------------ #
 
@@ -213,6 +339,15 @@ class Mod:
             return normalized
 
         raise TypeError("sound entries must be strings or dicts")
+
+    # ------------------------------------------------------------------ #
+    # Creative tabs
+    # ------------------------------------------------------------------ #
+
+    def creative_tab(self, tab_id: str, title: str, icon_item: str):
+        tab = CreativeTab(self, tab_id=tab_id, title=title, icon_item=icon_item)
+        self._creative_tabs.append(tab)
+        return tab
 
     # ------------------------------------------------------------------ #
     # Dimension system
@@ -384,7 +519,7 @@ class Mod:
             f"loader={self.loader!r} mc={self.minecraft_version!r} "
             f"blocks={len(self._blocks)} items={len(self._items)} entities={len(self._entities)} "
             f"events={len(self._events)} commands={len(self._commands)} "
-            f"recipes={len(self._recipes)} sounds={len(self._sounds)} "
+            f"recipes={len(self._recipes)} advancements={len(self._advancements)} sounds={len(self._sounds)} creative_tabs={len(self._creative_tabs)} "
             f"dimension_types={len(self._dimension_types)} dimensions={len(self._dimensions)} "
             f"structures={len(self._structures)}>"
         )
