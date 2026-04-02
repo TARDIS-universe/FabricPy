@@ -28,6 +28,7 @@ Main methods:
 - `mod.item_advancement(...)`: register a simple inventory-based advancement
 - `mod.add_sound(sound_id, sounds, subtitle="", replace=False)`: register a sound event for `sounds.json`
 - `mod.creative_tab(tab_id, title, icon_item)`: create a custom creative tab builder
+- `mod.keybind(keybind_id, title, key, category="", category_title="")`: define a client keybind
 - `mod.add_dimension_type(type_id, data)`: register a dimension type JSON
 - `mod.add_dimension(dimension_id, dimension_type, generator=None, data=None)`: register a dimension JSON
 - `mod.add_structure(structure_id, nbt_path)`: copy an NBT structure template into the generated datapack
@@ -156,6 +157,21 @@ mod.add_sound(
     "machines/alarm",
     subtitle="Alarm sounding",
 )
+```
+
+Keybind example:
+
+```python
+scanner_bind = mod.keybind(
+    keybind_id="open_scanner",
+    title="Open Scanner",
+    key="R",
+    category_title="Playtime Controls",
+)
+
+@scanner_bind.on_press
+def on_open_scanner(ctx):
+    ctx.player.send_action_bar("Scanner opened")
 ```
 
 Dimension example:

@@ -75,6 +75,8 @@ World helpers:
 - `ctx.world.is_raining()`
 - `ctx.world.get_dimension()`
 - `ctx.world.spawn_lightning()`
+- `ctx.client`
+- `ctx.keybind`
 
 World example:
 

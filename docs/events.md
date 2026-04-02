@@ -22,6 +22,8 @@ Supported event names:
 - `server_stop`
 - `server_tick`
 
+Keybind handlers are defined separately through `mod.keybind(...).on_press`, not through `@mod.event(...)`.
+
 Example:
 
 ```python

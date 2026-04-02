@@ -291,6 +291,20 @@ def _blocks_requiring_cutout(mod: "Mod") -> list:
     ]
 
 
+def _keybind_code_expr(keybind) -> str:
+    key = keybind.key
+    if isinstance(key, int):
+        return str(key)
+    raw = str(key).strip().upper()
+    if raw.startswith("GLFW.GLFW_KEY_"):
+        return raw
+    if raw.startswith("GLFW_KEY_"):
+        return f"GLFW.{raw}"
+    if len(raw) == 1 and raw.isalnum():
+        return f"GLFW.GLFW_KEY_{raw}"
+    return f"GLFW.GLFW_KEY_{raw}"
+
+
 def _fabric_spawn_group(group: str) -> str:
     mapping = {
         "monster": "SpawnGroup.MONSTER",
@@ -324,6 +338,7 @@ def generate_fabric_project(mod: "Mod", project_dir: Path):
     _write_mod_block_entities(mod, java_root, pkg)
     _write_mod_items(mod, java_root, pkg)
     _write_mod_creative_tabs(mod, java_root, pkg)
+    _write_mod_keybinds(mod, java_root, pkg, transpiler)
     _write_mod_entities(mod, java_root, pkg)
     _write_block_classes(mod, java_root, pkg, transpiler)
     _write_item_classes(mod, java_root, pkg, transpiler)
@@ -407,25 +422,84 @@ public class {class_name} implements ModInitializer {{
 
 def _write_client_class(mod: "Mod", java_root: Path, pkg: str):
     cutout_blocks = _blocks_requiring_cutout(mod)
-    if not cutout_blocks:
+    has_keybinds = bool(mod._keybinds)
+    if not cutout_blocks and not has_keybinds:
         return
     class_name = f"{to_pascal(mod.mod_id)}Client"
+    imports = []
+    if has_keybinds:
+        imports.append(f"import {pkg}.client.ModKeybinds;")
     src = f"""\
 package {pkg};
 
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.blockrenderlayer.v1.BlockRenderLayerMap;
 import net.minecraft.client.render.RenderLayer;
+{chr(10).join(imports)}
 
 public class {class_name} implements ClientModInitializer {{
 
     @Override
     public void onInitializeClient() {{
 {chr(10).join([f"        BlockRenderLayerMap.INSTANCE.putBlock(ModBlocks.{block.block_id.upper()}, RenderLayer.getCutout());" for block in cutout_blocks])}
+{"        ModKeybinds.registerClient();" if has_keybinds else ""}
     }}
 }}
 """
     _write_text(java_root / f"{class_name}.java", src)
+
+
+def _write_mod_keybinds(mod: "Mod", java_root: Path, pkg: str, transpiler: JavaTranspiler):
+    if not mod._keybinds:
+        return
+    client_dir = java_root / "client"
+    client_dir.mkdir(exist_ok=True)
+    declarations = []
+    handlers = []
+    for bind in mod._keybinds:
+        const_name = bind.keybind_id.replace("/", "_").upper()
+        title_key = f"key.{mod.mod_id}.{bind.keybind_id.replace('/', '.')}"
+        category_key = f"key.categories.{bind.category.replace('/', '.')}"
+        declarations.append(
+            f'    public static final KeyBinding {const_name} = KeyBindingHelper.registerKeyBinding('
+            f'new KeyBinding("{title_key}", InputUtil.Type.KEYSYM, {_keybind_code_expr(bind)}, "{category_key}"));'
+        )
+        if bind.source:
+            body = transpiler.transpile_method(bind.source)
+            handlers.append(f"""\
+            while ({const_name}.wasPressed()) {{
+                if (client.player == null || client.world == null) {{
+                    continue;
+                }}
+                var player = client.player;
+                var world = client.world;
+                var server = client.getServer();
+                var keybind = {const_name};
+                BlockPos soundPos = player.getBlockPos();
+{body}
+            }}""")
+    src = f"""\
+package {pkg}.client;
+
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.minecraft.client.option.KeyBinding;
+import net.minecraft.client.util.InputUtil;
+import net.minecraft.util.math.BlockPos;
+import org.lwjgl.glfw.GLFW;
+{chr(10).join(FABRIC_EXTRA_IMPORTS)}
+
+public class ModKeybinds {{
+{chr(10).join(declarations)}
+
+    public static void registerClient() {{
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {{
+{chr(10).join(handlers) if handlers else "            // No keybind handlers"}
+        }});
+    }}
+}}
+"""
+    _write_text(client_dir / "ModKeybinds.java", src)
 
 
 # ─────────────────────────────────────────────────────────────────────────── #
@@ -1568,7 +1642,7 @@ def _write_resources(mod: "Mod", res_root: Path, pkg: str):
             "java": ">=17",
         },
     }
-    if _blocks_requiring_cutout(mod):
+    if _blocks_requiring_cutout(mod) or mod._keybinds:
         fabric_mod["entrypoints"]["client"] = [f"{pkg}.{to_pascal(mod.mod_id)}Client"]
     if mod._mixins:
         fabric_mod["mixins"] = [f"{mod.mod_id}.mixins.json"]
@@ -1599,6 +1673,9 @@ def _write_resources(mod: "Mod", res_root: Path, pkg: str):
         lang[f"entity.{mod.mod_id}.{entity.entity_id}"] = entity.get_display_name()
     for tab in mod._creative_tabs:
         lang[f"itemGroup.{mod.mod_id}.{tab.tab_id.replace('/', '.')}"] = tab.title
+    for bind in mod._keybinds:
+        lang[f"key.{mod.mod_id}.{bind.keybind_id.replace('/', '.')}"] = bind.title
+        lang[f"key.categories.{bind.category.replace('/', '.')}"] = bind.category_title
     for advancement in mod._advancements:
         advancement_key = advancement["id"].replace("/", ".")
         display = advancement["data"].get("display", {})

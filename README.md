@@ -17,6 +17,7 @@ Docs:
 - `docs/recipes.md`
 - `docs/advancements.md`
 - `docs/creative-tabs.md`
+- `docs/keybinds.md`
 - `docs/sounds.md`
 - `docs/dimensions.md`
 - `docs/structures.md`
@@ -46,6 +47,7 @@ Content support now includes:
 - items
 - advancements
 - custom creative tabs
+- client keybind definitions and handlers
 - block entities through `has_block_entity=True` and `@mc.on_tick`
 - persistent block data through `uses_block_data=True`
 - normal entities through `mc.Entity`

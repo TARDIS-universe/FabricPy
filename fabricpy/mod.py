@@ -70,6 +70,50 @@ class CreativeTab:
         return item_id
 
 
+class Keybind:
+    def __init__(self, mod, keybind_id: str, title: str, key, category: str = "", category_title: str = ""):
+        if not keybind_id:
+            raise ValueError("keybind_id is required")
+        if not title:
+            raise ValueError("title is required")
+        if key is None or key == "":
+            raise ValueError("key is required")
+        self.mod = mod
+        self.keybind_id = keybind_id.replace("\\", "/").strip("/")
+        self.title = title
+        self.key = key
+        self.category = category or mod.mod_id
+        self.category_title = category_title or mod.name
+        self.func = None
+        self.source = ""
+        self.key_type = "keyboard"
+
+    def set_title(self, title: str):
+        if not title:
+            raise ValueError("title is required")
+        self.title = title
+        return title
+
+    def set_key(self, key):
+        if key is None or key == "":
+            raise ValueError("key is required")
+        self.key = key
+        return key
+
+    def set_category(self, category: str, title: str = ""):
+        if not category:
+            raise ValueError("category is required")
+        self.category = category
+        if title:
+            self.category_title = title
+        return category
+
+    def on_press(self, func):
+        self.func = func
+        self.source = inspect.getsource(func)
+        return func
+
+
 class Mod:
     def __init__(
         self,
@@ -123,6 +167,7 @@ class Mod:
         self._advancements: list = []
         self._sounds: list = []
         self._creative_tabs: list = []
+        self._keybinds: list = []
         self._dimension_types: list = []
         self._dimensions: list = []
         self._structures: list = []
@@ -350,6 +395,22 @@ class Mod:
         return tab
 
     # ------------------------------------------------------------------ #
+    # Keybind system
+    # ------------------------------------------------------------------ #
+
+    def keybind(self, keybind_id: str, title: str, key, category: str = "", category_title: str = ""):
+        bind = Keybind(
+            self,
+            keybind_id=keybind_id,
+            title=title,
+            key=key,
+            category=category,
+            category_title=category_title,
+        )
+        self._keybinds.append(bind)
+        return bind
+
+    # ------------------------------------------------------------------ #
     # Dimension system
     # ------------------------------------------------------------------ #
 
@@ -519,7 +580,7 @@ class Mod:
             f"loader={self.loader!r} mc={self.minecraft_version!r} "
             f"blocks={len(self._blocks)} items={len(self._items)} entities={len(self._entities)} "
             f"events={len(self._events)} commands={len(self._commands)} "
-            f"recipes={len(self._recipes)} advancements={len(self._advancements)} sounds={len(self._sounds)} creative_tabs={len(self._creative_tabs)} "
+            f"recipes={len(self._recipes)} advancements={len(self._advancements)} sounds={len(self._sounds)} creative_tabs={len(self._creative_tabs)} keybinds={len(self._keybinds)} "
             f"dimension_types={len(self._dimension_types)} dimensions={len(self._dimensions)} "
             f"structures={len(self._structures)}>"
         )

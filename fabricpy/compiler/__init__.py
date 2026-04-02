@@ -47,6 +47,7 @@ def compile_mod(mod: "Mod", output_dir: str = "./dist", clean: bool = False):
     print(f"  Advancements: {len(mod._advancements)}")
     print(f"  Sounds:   {len(mod._sounds)}")
     print(f"  Creative Tabs: {len(mod._creative_tabs)}")
+    print(f"  Keybinds: {len(mod._keybinds)}")
     print(f"  Dimension Types: {len(mod._dimension_types)}")
     print(f"  Dimensions:      {len(mod._dimensions)}")
     print(f"  Structures:      {len(mod._structures)}")

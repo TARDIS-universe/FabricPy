@@ -8,6 +8,7 @@ This page is now just a pointer to the split API docs:
 - [recipes.md](./recipes.md)
 - [advancements.md](./advancements.md)
 - [creative-tabs.md](./creative-tabs.md)
+- [keybinds.md](./keybinds.md)
 - [sounds.md](./sounds.md)
 - [dimensions.md](./dimensions.md)
 - [structures.md](./structures.md)

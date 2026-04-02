@@ -275,6 +275,20 @@ def _blocks_requiring_cutout(mod: "Mod") -> list:
     ]
 
 
+def _keybind_code_expr(keybind) -> str:
+    key = keybind.key
+    if isinstance(key, int):
+        return str(key)
+    raw = str(key).strip().upper()
+    if raw.startswith("GLFW.GLFW_KEY_"):
+        return raw
+    if raw.startswith("GLFW_KEY_"):
+        return f"GLFW.{raw}"
+    if len(raw) == 1 and raw.isalnum():
+        return f"GLFW.GLFW_KEY_{raw}"
+    return f"GLFW.GLFW_KEY_{raw}"
+
+
 def _mob_category(group: str) -> str:
     mapping = {
         "monster": "MobCategory.MONSTER",
@@ -307,6 +321,7 @@ def generate_forge_project(mod: "Mod", project_dir: Path):
     _write_mod_block_entities(mod, java_root, pkg)
     _write_mod_items(mod, java_root, pkg)
     _write_mod_creative_tabs(mod, java_root, pkg)
+    _write_mod_keybinds(mod, java_root, pkg, transpiler)
     _write_mod_entities(mod, java_root, pkg)
     _write_block_classes(mod, java_root, pkg, transpiler)
     _write_item_classes(mod, java_root, pkg, transpiler)
@@ -323,6 +338,7 @@ def _write_main_class(mod, java_root: Path, pkg: str):
     class_name = to_pascal(mod.mod_id)
     has_block_entities = bool(_blocks_with_block_entities(mod))
     has_creative_tabs = bool(mod._creative_tabs)
+    has_keybinds = bool(mod._keybinds)
     cutout_blocks = _blocks_requiring_cutout(mod)
 
     imports = []
@@ -334,6 +350,8 @@ def _write_main_class(mod, java_root: Path, pkg: str):
         imports.append(f"import {pkg}.event.ModEvents;")
     if has_block_entities:
         imports.append(f"import {pkg}.blockentity.ModBlockEntities;")
+    if has_keybinds:
+        imports.append(f"import {pkg}.client.ModKeybinds;")
 
     src = f"""\
 package {pkg};
@@ -364,19 +382,20 @@ public class {class_name} {{
         {"ModItems.ITEMS.register(bus);" if mod._items else "// No items"}
         {"ModBlockEntities.BLOCK_ENTITIES.register(bus);" if has_block_entities else ""}
         {"ModCreativeTabs.TABS.register(bus);" if has_creative_tabs else ""}
+        {"ModKeybinds.register(bus);" if has_keybinds else ""}
         {"ModEntities.ENTITIES.register(bus);" if mod._entities else ""}
         {"bus.addListener(ModEvents::onCommonSetup);" if mod._events else "// No events"}
         {"bus.addListener(ModBlocks::addCreative);" if mod._blocks else ""}
         {"bus.addListener(ModItems::addCreative);" if mod._items else ""}
         {"bus.addListener(ModEntities::registerAttributes);" if mod._entities else ""}
-        {"bus.addListener(this::onClientSetup);" if cutout_blocks else ""}
+        {"bus.addListener(this::onClientSetup);" if (cutout_blocks or has_keybinds) else ""}
 
         // Register command events on Forge's main bus
         {"net.minecraftforge.common.MinecraftForge.EVENT_BUS.register(ModCommands.class);" if mod._commands else "// No commands"}
         {"net.minecraftforge.common.MinecraftForge.EVENT_BUS.register(ModEvents.class);" if mod._events else ""}
     }}
 
-    {"public void onClientSetup(FMLClientSetupEvent event) {\n        event.enqueueWork(() -> {\n" + chr(10).join([f"            ItemBlockRenderTypes.setRenderLayer(ModBlocks.{block.block_id.upper()}.get(), RenderType.cutout());" for block in cutout_blocks]) + "\n        });\n    }" if cutout_blocks else ""}
+    {"public void onClientSetup(FMLClientSetupEvent event) {\n        event.enqueueWork(() -> {\n" + chr(10).join([f"            ItemBlockRenderTypes.setRenderLayer(ModBlocks.{block.block_id.upper()}.get(), RenderType.cutout());" for block in cutout_blocks]) + ("\n            // Keybinds register through ModKeybinds on the client bus." if has_keybinds else "") + "\n        });\n    }" if (cutout_blocks or has_keybinds) else ""}
 }}
 """
     _write_text(java_root / f"{class_name}.java", src)
@@ -574,6 +593,73 @@ public class ModCreativeTabs {{
 }}
 """
     _write_text(java_root / "ModCreativeTabs.java", src)
+
+
+def _write_mod_keybinds(mod, java_root: Path, pkg: str, transpiler: JavaTranspiler):
+    if not mod._keybinds:
+        return
+    client_dir = java_root / "client"
+    client_dir.mkdir(exist_ok=True)
+    declarations = []
+    handlers = []
+    for bind in mod._keybinds:
+        const_name = bind.keybind_id.replace("/", "_").upper()
+        title_key = f"key.{mod.mod_id}.{bind.keybind_id.replace('/', '.')}"
+        category_key = f"key.categories.{bind.category.replace('/', '.')}"
+        declarations.append(
+            f'    public static final KeyMapping {const_name} = new KeyMapping("{title_key}", InputConstants.Type.KEYSYM, {_keybind_code_expr(bind)}, "{category_key}");'
+        )
+        if bind.source:
+            body = transpiler.transpile_method(bind.source)
+            handlers.append(f"""\
+        while ({const_name}.consumeClick()) {{
+            if (client.player == null || client.level == null) {{
+                continue;
+            }}
+            var player = client.player;
+            var level = client.level;
+            var server = client.getSingleplayerServer();
+            var keybind = {const_name};
+            BlockPos soundPos = player.blockPosition();
+{body}
+        }}""")
+    src = f"""\
+package {pkg}.client;
+
+import com.mojang.blaze3d.platform.InputConstants;
+import net.minecraft.client.KeyMapping;
+import net.minecraft.client.Minecraft;
+import net.minecraft.core.BlockPos;
+import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
+import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.eventbus.api.IEventBus;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import org.lwjgl.glfw.GLFW;
+{chr(10).join(FORGE_EXTRA_IMPORTS)}
+
+public class ModKeybinds {{
+{chr(10).join(declarations)}
+
+    public static void register(IEventBus bus) {{
+        bus.addListener(ModKeybinds::onRegisterKeyMappings);
+        net.minecraftforge.common.MinecraftForge.EVENT_BUS.register(ModKeybinds.class);
+    }}
+
+    public static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {{
+{chr(10).join([f"        event.register({bind.keybind_id.replace('/', '_').upper()});" for bind in mod._keybinds])}
+    }}
+
+    @SubscribeEvent
+    public static void onClientTick(TickEvent.ClientTickEvent event) {{
+        if (event.phase != TickEvent.Phase.END) {{
+            return;
+        }}
+        Minecraft client = Minecraft.getInstance();
+{chr(10).join(handlers) if handlers else "        // No keybind handlers"}
+    }}
+}}
+"""
+    _write_text(client_dir / "ModKeybinds.java", src)
 
 
 def _write_mod_entities(mod, java_root: Path, pkg: str):
@@ -1406,6 +1492,9 @@ description="{mod.description}"
         lang[f"entity.{mod.mod_id}.{entity.entity_id}"] = entity.get_display_name()
     for tab in mod._creative_tabs:
         lang[f"itemGroup.{mod.mod_id}.{tab.tab_id.replace('/', '.')}"] = tab.title
+    for bind in mod._keybinds:
+        lang[f"key.{mod.mod_id}.{bind.keybind_id.replace('/', '.')}"] = bind.title
+        lang[f"key.categories.{bind.category.replace('/', '.')}"] = bind.category_title
     for advancement in mod._advancements:
         advancement_key = advancement["id"].replace("/", ".")
         display = advancement["data"].get("display", {})

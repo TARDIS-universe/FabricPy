@@ -132,6 +132,10 @@ FABRIC_API_MAP: dict[str, str] = {
         'world.getRegistryKey().getValue().toString()',
     "ctx.world.spawn_lightning":
         'world.spawnEntity(new LightningEntity(EntityType.LIGHTNING_BOLT, world))',
+    "ctx.client":
+        'client',
+    "ctx.keybind":
+        'keybind',
 
     # Context values
     "ctx.pos":
@@ -373,6 +377,10 @@ FORGE_API_MAP: dict[str, str] = {
         'level.isRaining()',
     "ctx.world.get_dimension":
         'level.dimension().location().toString()',
+    "ctx.client":
+        'client',
+    "ctx.keybind":
+        'keybind',
 
     # Context values
     "ctx.pos":
