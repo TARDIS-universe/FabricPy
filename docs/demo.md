@@ -100,7 +100,7 @@ The animated relay uses:
 
 The animated entity uses:
 
-- `assets/demo/geo/mobs/time_wisp.geo.json`
+- `assets/demo/geo/mobs/time_wisp.bbmodel`
 - `assets/demo/animations/mobs/time_wisp.animation.json`
 - `assets/demo/textures/entity/mobs/time_wisp.png`
 

@@ -172,9 +172,17 @@ def spawn_time_wisp(ctx):
 
 Geo asset layout for the `TimeWisp` example above:
 
-- `assets/mymod/geo/mobs/time_wisp.geo.json`
+- `assets/mymod/geo/mobs/time_wisp.geo.json` or `assets/mymod/geo/mobs/time_wisp.bbmodel`
 - `assets/mymod/textures/entity/mobs/time_wisp.png`
 - `assets/mymod/animations/mobs/time_wisp.animation.json`
+
+`.bbmodel` support:
+
+- if a `.bbmodel` file exists under `assets/<modid>/geo/...`, FabricPy compiles it into the `.geo.json` GeckoLib expects during mod generation
+- `geo_model = "mobs/time_wisp"` works with either source file
+- `geo_model = "mobs/time_wisp.bbmodel"` also works
+- this path currently imports the model geometry and bone hierarchy
+- keep textures as normal PNG assets and animations as normal `.animation.json` files
 
 Notes:
 

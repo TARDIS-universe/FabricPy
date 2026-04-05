@@ -32,6 +32,7 @@ if TYPE_CHECKING:
 from fabricpy.compiler.transpiler import JavaTranspiler
 from fabricpy.compiler.symbol_index import write_interop_metadata
 from fabricpy.compiler.jar_scanner import build_symbol_index_for_project
+from fabricpy.compiler.bbmodel_converter import compile_bbmodels_in_assets
 from fabricpy.compiler.api_maps import (
     FABRIC_API_MAP, FABRIC_EXTRA_IMPORTS,
     FABRIC_EVENT_MAP,
@@ -369,8 +370,17 @@ def _resource_location_parts(mod_id: str, ref: str, prefix: str, default_id: str
     return namespace, path
 
 
+def _geo_model_resource_parts(mod_id: str, ref: str, default_id: str) -> tuple[str, str]:
+    clean = (ref or "").strip()
+    if clean.endswith(".bbmodel"):
+        clean = clean[:-8]
+    elif clean.endswith(".geo.json"):
+        clean = clean[:-9]
+    return _resource_location_parts(mod_id, clean, "geo", default_id, ".geo.json")
+
+
 def _geo_model_parts(mod_id: str, block) -> tuple[str, str]:
-    return _resource_location_parts(mod_id, getattr(block, "geo_model", ""), "geo", block.block_id, ".geo.json")
+    return _geo_model_resource_parts(mod_id, getattr(block, "geo_model", ""), block.block_id)
 
 
 def _geo_texture_parts(mod_id: str, block) -> tuple[str, str]:
@@ -382,7 +392,7 @@ def _geo_animation_parts(mod_id: str, block) -> tuple[str, str]:
 
 
 def _geo_entity_model_parts(mod_id: str, entity) -> tuple[str, str]:
-    return _resource_location_parts(mod_id, getattr(entity, "geo_model", ""), "geo", entity.entity_id, ".geo.json")
+    return _geo_model_resource_parts(mod_id, getattr(entity, "geo_model", ""), entity.entity_id)
 
 
 def _geo_entity_texture_parts(mod_id: str, entity) -> tuple[str, str]:
@@ -2688,6 +2698,7 @@ def _write_resources(mod: "Mod", res_root: Path, pkg: str):
     project_root = Path.cwd()
     _copy_tree_if_exists(project_root / "assets" / mod.mod_id, res_root / "assets" / mod.mod_id)
     _copy_tree_if_exists(project_root / "data" / mod.mod_id, res_root / "data" / mod.mod_id)
+    compile_bbmodels_in_assets(res_root / "assets" / mod.mod_id, mod.mod_id)
 
     # pack.mcmeta
     _write_text(res_root / "pack.mcmeta", json.dumps({

@@ -115,15 +115,17 @@ geo_animations = "machines/animated_panel"
 
 the expected block files are:
 
-- `assets/<modid>/geo/machines/animated_panel.geo.json`
+- `assets/<modid>/geo/machines/animated_panel.geo.json` or `assets/<modid>/geo/machines/animated_panel.bbmodel`
 - `assets/<modid>/textures/block/machines/animated_panel.png`
 - `assets/<modid>/animations/machines/animated_panel.animation.json`
 
 Animated entities use:
 
-- `assets/<modid>/geo/<path>.geo.json`
+- `assets/<modid>/geo/<path>.geo.json` or `assets/<modid>/geo/<path>.bbmodel`
 - `assets/<modid>/textures/entity/<path>.png`
 - `assets/<modid>/animations/<path>.animation.json`
+
+When you use `.bbmodel`, FabricPy converts it to a generated `.geo.json` during compile. That lets you keep the Blockbench project file as the source of truth instead of exporting the model by hand every time.
 
 For translucent or spectral entities, prefer:
 
