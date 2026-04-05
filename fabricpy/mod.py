@@ -114,6 +114,34 @@ class Keybind:
         return func
 
 
+class Dependency:
+    def __init__(
+        self,
+        coordinate: str,
+        loader: str = "both",
+        scope: str = "",
+        repo: str = "",
+        deobf: bool = True,
+        mod_id: str = "",
+        required: bool = False,
+        version_range: str = "*",
+        ordering: str = "NONE",
+        side: str = "BOTH",
+    ):
+        if not coordinate:
+            raise ValueError("coordinate is required")
+        self.coordinate = coordinate
+        self.loader = loader.lower().strip()
+        self.scope = scope.strip()
+        self.repo = repo.strip()
+        self.deobf = deobf
+        self.mod_id = mod_id.strip()
+        self.required = required
+        self.version_range = version_range.strip() or "*"
+        self.ordering = ordering.strip() or "NONE"
+        self.side = side.strip() or "BOTH"
+
+
 class Mod:
     def __init__(
         self,
@@ -168,6 +196,7 @@ class Mod:
         self._sounds: list = []
         self._creative_tabs: list = []
         self._keybinds: list = []
+        self._dependencies: list = []
         self._dimension_types: list = []
         self._dimensions: list = []
         self._structures: list = []
@@ -411,6 +440,38 @@ class Mod:
         return bind
 
     # ------------------------------------------------------------------ #
+    # Dependency system
+    # ------------------------------------------------------------------ #
+
+    def dependency(
+        self,
+        coordinate: str,
+        loader: str = "both",
+        scope: str = "",
+        repo: str = "",
+        deobf: bool = True,
+        mod_id: str = "",
+        required: bool = False,
+        version_range: str = "*",
+        ordering: str = "NONE",
+        side: str = "BOTH",
+    ):
+        dep = Dependency(
+            coordinate=coordinate,
+            loader=loader,
+            scope=scope,
+            repo=repo,
+            deobf=deobf,
+            mod_id=mod_id,
+            required=required,
+            version_range=version_range,
+            ordering=ordering,
+            side=side,
+        )
+        self._dependencies.append(dep)
+        return dep
+
+    # ------------------------------------------------------------------ #
     # Dimension system
     # ------------------------------------------------------------------ #
 
@@ -581,6 +642,7 @@ class Mod:
             f"blocks={len(self._blocks)} items={len(self._items)} entities={len(self._entities)} "
             f"events={len(self._events)} commands={len(self._commands)} "
             f"recipes={len(self._recipes)} advancements={len(self._advancements)} sounds={len(self._sounds)} creative_tabs={len(self._creative_tabs)} keybinds={len(self._keybinds)} "
+            f"dependencies={len(self._dependencies)} "
             f"dimension_types={len(self._dimension_types)} dimensions={len(self._dimensions)} "
             f"structures={len(self._structures)}>"
         )

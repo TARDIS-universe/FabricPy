@@ -1,31 +1,66 @@
 # FabricPy Docs
 
-- [building.md](./building.md)
-- [mod.md](./mod.md)
-- [blocks.md](./blocks.md)
-- [items.md](./items.md)
-- [entities.md](./entities.md)
-- [recipes.md](./recipes.md)
-- [advancements.md](./advancements.md)
-- [creative-tabs.md](./creative-tabs.md)
-- [keybinds.md](./keybinds.md)
+This docs set is split into two layers:
+
+- the everyday Python API you use to make content quickly
+- the advanced compiler/runtime/interoperability systems that let you push past the hand-written surface
+
+If you are new to the repo, read in this order:
+
+1. [building.md](./building.md)
+2. [mod.md](./mod.md)
+3. [blocks.md](./blocks.md)
+4. [items.md](./items.md)
+5. [events.md](./events.md)
+6. [context.md](./context.md)
+
+If you are working on advanced systems, also read:
+
 - [animations.md](./animations.md)
-- [sounds.md](./sounds.md)
-- [dimensions.md](./dimensions.md)
-- [structures.md](./structures.md)
-- [textures.md](./textures.md)
-- [models.md](./models.md)
-- [events.md](./events.md)
-- [commands.md](./commands.md)
-- [mixins.md](./mixins.md)
-- [decorators.md](./decorators.md)
-- [context.md](./context.md)
+- [dependencies.md](./dependencies.md)
+- [interop.md](./interop.md)
+- [roadmap.md](./roadmap.md)
+- [demo.md](./demo.md)
 
-Use this set as the Python API reference for `fabricpy`.
+## Core Reference
 
-Project source assets and data live in:
+- [building.md](./building.md): environment setup, compile flow, generated project layout, troubleshooting
+- [mod.md](./mod.md): `mc.Mod`, registration, recipes, advancements, sounds, creative tabs, keybinds, dependencies, dimensions
+- [blocks.md](./blocks.md): block properties, hooks, rotation, emissives, block data, animated blocks
+- [items.md](./items.md): items, textures, models, emissive layers, right-click hooks, stack appearance data
+- [entities.md](./entities.md): normal entities and block entities
+- [recipes.md](./recipes.md): shaped, shapeless, and raw recipe JSON
+- [advancements.md](./advancements.md): advancement generation
+- [creative-tabs.md](./creative-tabs.md): tab creation and tab item lists
+- [keybinds.md](./keybinds.md): client keybind declarations and handlers
+- [sounds.md](./sounds.md): sounds.json generation and sound asset layout
+- [textures.md](./textures.md): texture path rules and generated path behavior
+- [models.md](./models.md): manual models, generated models, overrides, particles, emissive overlays
+- [events.md](./events.md): global event hooks
+- [commands.md](./commands.md): slash commands
+- [decorators.md](./decorators.md): block/item/mixin decorators
+- [context.md](./context.md): `ctx` surface and all mapped helper calls
+
+## Advanced / Compiler Reference
+
+- [animations.md](./animations.md): GeckoLib-backed animated blocks
+- [dependencies.md](./dependencies.md): dependency declarations, generated metadata, jar scanning, stub generation
+- [interop.md](./interop.md): current dependency interop architecture and limits
+- [roadmap.md](./roadmap.md): where the compiler is heading
+- [demo.md](./demo.md): walkthrough of the canonical `demo.py` showcase mod
+
+## Source Layout
+
+Repo-authored assets and data live in:
 
 - `assets/<modid>/...`
 - `data/<modid>/...`
 
-Those folders are copied into generated loader projects during compile. Files from the repo override generated defaults when paths collide.
+These are copied into generated loader projects during compile. When the same path exists in both generated output and repo source, the repo file wins.
+
+## Supported Matrix
+
+- `1.20.1`: Fabric, Forge
+- `1.21.1`: Fabric, Forge
+
+`loader="both"` and `loader="all"` both currently resolve to Fabric plus Forge.

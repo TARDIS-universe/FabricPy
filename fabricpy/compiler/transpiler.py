@@ -17,17 +17,23 @@ still succeeds and you can fill it in manually.
 
 import ast
 import textwrap
+from pathlib import Path
 from typing import Optional
+
+from fabricpy.compiler.interop_resolver import InteropResolver
 
 
 class JavaTranspiler:
     """Transpiles a Python function body to Java statements."""
 
-    def __init__(self, api_map: dict, indent_spaces: int = 4):
+    def __init__(self, api_map: dict, indent_spaces: int = 4, interop_index_path: Optional[Path] = None):
         self.api_map = api_map
         self.indent_spaces = indent_spaces
         self._lines: list[str] = []
         self._depth: int = 0
+        self._interop_index_path = Path(interop_index_path) if interop_index_path else None
+        self._interop_resolver = InteropResolver.from_index(self._interop_index_path)
+        self._interop_notes: list[str] = []
 
     # ------------------------------------------------------------------ #
     # Public entry point
@@ -54,10 +60,15 @@ class JavaTranspiler:
             return "    // Could not find function definition to transpile"
 
         self._lines = []
+        self._interop_notes = []
         self._depth = 1  # inside a Java method body = 1 indent level
 
         for stmt in func_node.body:
             self._stmt(stmt)
+
+        if self._interop_notes:
+            notes = [(" " * self.indent_spaces) + f"// interop: {note}" for note in self._interop_notes]
+            return "\n".join(notes + self._lines)
 
         return "\n".join(self._lines)
 
@@ -228,6 +239,9 @@ class JavaTranspiler:
             dotted = self._dotted(node)
             if dotted in self.api_map:
                 return self.api_map[dotted]
+            interop = self._resolve_interop_dotted(dotted)
+            if interop:
+                return interop
             return f"{self._expr(node.value)}.{node.attr}"
 
         elif isinstance(node, ast.Call):
@@ -297,10 +311,11 @@ class JavaTranspiler:
     def _call(self, node: ast.Call) -> str:
         # Build dotted signature for API map lookup
         sig = self._dotted(node.func)
+        args = [self._expr(a) for a in node.args]
+        kwargs = {kw.arg: self._expr(kw.value) for kw in node.keywords if kw.arg}
 
         if isinstance(node.func, ast.Name):
             builtin = node.func.id
-            args = [self._expr(a) for a in node.args]
             if builtin == "str" and len(args) == 1:
                 return f"String.valueOf({args[0]})"
             if builtin == "int" and len(args) == 1:
@@ -312,8 +327,6 @@ class JavaTranspiler:
 
         if sig in self.api_map:
             template = self.api_map[sig]
-            args = [self._expr(a) for a in node.args]
-            kwargs = {kw.arg: self._expr(kw.value) for kw in node.keywords if kw.arg}
             try:
                 return template.format(*args, **kwargs)
             except (IndexError, KeyError):
@@ -323,9 +336,18 @@ class JavaTranspiler:
                     result = result.replace(f"{{{i}}}", a)
                 return result
 
+        interop_call = self._interop_resolver.resolve_dependency_call(sig, len(node.args))
+        if interop_call:
+            if interop_call.reason:
+                note = f"{sig} -> {interop_call.java_path}: {interop_call.reason}"
+                if note not in self._interop_notes:
+                    self._interop_notes.append(note)
+            if interop_call.kind == "constructor":
+                return f"new {interop_call.java_path}({', '.join(args)})"
+            return f"{interop_call.java_path}({', '.join(args)})"
+
         # Generic call — not in API map
         func = self._expr(node.func)
-        args = [self._expr(a) for a in node.args]
         for kw in node.keywords:
             if kw.arg:
                 args.append(f"/* {kw.arg}= */ {self._expr(kw.value)}")
@@ -338,6 +360,9 @@ class JavaTranspiler:
         elif isinstance(node, ast.Name):
             return node.id
         return ""
+
+    def _resolve_interop_dotted(self, dotted: str) -> Optional[str]:
+        return self._interop_resolver.resolve_dependency_path(dotted)
 
     def _binop_expr(self, node: ast.BinOp) -> str:
         left = self._expr(node.left)

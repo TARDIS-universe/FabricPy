@@ -25,6 +25,7 @@ def compile_mod(mod: "Mod", output_dir: str = "./dist", clean: bool = False):
     from fabricpy.compiler.fabric_gen import generate_fabric_project
     from fabricpy.compiler.forge_gen import generate_forge_project
     from fabricpy.compiler.gradle_runner import run_build
+    from fabricpy.compiler.jar_scanner import build_symbol_index_for_project
 
     _validate(mod)
 
@@ -48,6 +49,7 @@ def compile_mod(mod: "Mod", output_dir: str = "./dist", clean: bool = False):
     print(f"  Sounds:   {len(mod._sounds)}")
     print(f"  Creative Tabs: {len(mod._creative_tabs)}")
     print(f"  Keybinds: {len(mod._keybinds)}")
+    print(f"  Dependencies: {len(mod._dependencies)}")
     print(f"  Dimension Types: {len(mod._dimension_types)}")
     print(f"  Dimensions:      {len(mod._dimensions)}")
     print(f"  Structures:      {len(mod._structures)}")
@@ -60,12 +62,24 @@ def compile_mod(mod: "Mod", output_dir: str = "./dist", clean: bool = False):
         generate_fabric_project(mod, fabric_dir)
         success = run_build(fabric_dir, mod.minecraft_version, "fabric", clean=clean, output_dir=out)
         results["fabric"] = success
+        if success:
+            try:
+                build_symbol_index_for_project(fabric_dir)
+                print(f"[fabricpy] Interop index written: {fabric_dir / '.fabricpy_meta' / 'symbol_index.json'}")
+            except Exception as exc:
+                print(f"[fabricpy] Warning: interop index generation failed for Fabric: {exc}")
 
     if "forge" in loaders:
         forge_dir = gen_root / f"{mod.mod_id}-forge"
         generate_forge_project(mod, forge_dir)
         success = run_build(forge_dir, mod.minecraft_version, "forge", clean=clean, output_dir=out)
         results["forge"] = success
+        if success:
+            try:
+                build_symbol_index_for_project(forge_dir)
+                print(f"[fabricpy] Interop index written: {forge_dir / '.fabricpy_meta' / 'symbol_index.json'}")
+            except Exception as exc:
+                print(f"[fabricpy] Warning: interop index generation failed for Forge: {exc}")
 
     print()
     print("=" * 50)

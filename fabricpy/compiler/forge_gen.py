@@ -29,6 +29,8 @@ if TYPE_CHECKING:
     from fabricpy.mod import Mod
 
 from fabricpy.compiler.transpiler import JavaTranspiler
+from fabricpy.compiler.symbol_index import write_interop_metadata
+from fabricpy.compiler.jar_scanner import build_symbol_index_for_project
 from fabricpy.compiler.api_maps import (
     FORGE_API_MAP, FORGE_EXTRA_IMPORTS,
     FORGE_EVENT_MAP,
@@ -279,6 +281,10 @@ def _blocks_with_geo_animation(mod: "Mod") -> list:
     return [block for block in mod._blocks if bool(getattr(block, "geo_model", ""))]
 
 
+def _uses_geckolib(mod: "Mod") -> bool:
+    return bool(_blocks_with_geo_animation(mod))
+
+
 def _resource_location_parts(mod_id: str, ref: str, prefix: str, default_id: str, suffix: str) -> tuple[str, str]:
     clean = (ref or "").strip()
     if ":" in clean:
@@ -320,6 +326,42 @@ def _keybind_code_expr(keybind) -> str:
     return f"GLFW.GLFW_KEY_{raw}"
 
 
+def _deps_for_loader(mod: "Mod", loader_name: str) -> list:
+    allowed = {loader_name, "both", "all", ""}
+    return [dep for dep in mod._dependencies if dep.loader in allowed]
+
+
+def _forge_repository_lines(mod: "Mod") -> list[str]:
+    repos = []
+    seen = set()
+    for dep in _deps_for_loader(mod, "forge"):
+        if dep.repo and dep.repo not in seen:
+            repos.append(f"    maven {{ url = '{dep.repo}' }}")
+            seen.add(dep.repo)
+    return repos
+
+
+def _forge_dependency_line(dep, mc: str) -> str:
+    scope = dep.scope or "implementation"
+    if dep.deobf:
+        return f"    {scope} fg.deobf('{dep.coordinate}')"
+    return f"    {scope} '{dep.coordinate}'"
+
+
+def _forge_manifest_dependencies(mod: "Mod") -> list[dict]:
+    deps = []
+    for dep in _deps_for_loader(mod, "forge"):
+        if dep.mod_id and dep.required:
+            deps.append({
+                "mod_id": dep.mod_id,
+                "required": True,
+                "version_range": dep.version_range or "*",
+                "ordering": dep.ordering or "NONE",
+                "side": dep.side or "BOTH",
+            })
+    return deps
+
+
 def _mob_category(group: str) -> str:
     mapping = {
         "monster": "MobCategory.MONSTER",
@@ -342,10 +384,43 @@ def generate_forge_project(mod: "Mod", project_dir: Path):
     java_root = src / "java" / pkg_path
     res_root = src / "resources"
 
+    if java_root.exists():
+        shutil.rmtree(java_root)
+    if res_root.exists():
+        shutil.rmtree(res_root)
+
     java_root.mkdir(parents=True, exist_ok=True)
     res_root.mkdir(parents=True, exist_ok=True)
 
-    transpiler = JavaTranspiler(FORGE_API_MAP)
+    interop_repositories = [*_forge_repository_lines(mod), "https://repo1.maven.org/maven2/"]
+    interop_dependency_lines = [_forge_dependency_line(dep, mod.minecraft_version) for dep in _deps_for_loader(mod, "forge")]
+    if _uses_geckolib(mod):
+        geckolib_versions = {
+            "1.20.1": "4.4.9",
+            "1.21.1": "5.0.0",
+        }
+        interop_repositories.insert(0, "https://dl.cloudsmith.io/public/geckolib3/geckolib/maven/")
+        interop_dependency_lines = [
+            f"implementation fg.deobf('software.bernie.geckolib:geckolib-forge-{mod.minecraft_version}:{geckolib_versions[mod.minecraft_version]}')",
+            *interop_dependency_lines,
+        ]
+    write_interop_metadata(
+        mod,
+        project_dir,
+        "forge",
+        repositories=interop_repositories,
+        dependency_lines=interop_dependency_lines,
+        manifest_dependencies=_forge_manifest_dependencies(mod),
+    )
+    try:
+        build_symbol_index_for_project(project_dir)
+    except Exception:
+        pass
+
+    transpiler = JavaTranspiler(
+        FORGE_API_MAP,
+        interop_index_path=project_dir / ".fabricpy_meta" / "symbol_index.json",
+    )
 
     _write_main_class(mod, java_root, pkg)
     _write_mod_blocks(mod, java_root, pkg)
@@ -362,7 +437,6 @@ def generate_forge_project(mod: "Mod", project_dir: Path):
     _write_commands(mod, java_root, pkg, transpiler)
     _write_resources(mod, res_root)
     _write_gradle_files(mod, project_dir)
-
     print(f"[fabricpy] Forge project generated at {project_dir}")
 
 
@@ -371,7 +445,7 @@ def _write_main_class(mod, java_root: Path, pkg: str):
     has_block_entities = bool(_blocks_with_block_entities(mod))
     has_creative_tabs = bool(mod._creative_tabs)
     has_keybinds = bool(mod._keybinds)
-    has_geo_blocks = bool(_blocks_with_geo_animation(mod))
+    has_geo_blocks = _uses_geckolib(mod)
     cutout_blocks = _blocks_requiring_cutout(mod)
 
     imports = []
@@ -1644,6 +1718,18 @@ def _write_resources(mod, res_root: Path):
     }
     meta = meta_by_version.get(mod.minecraft_version, meta_by_version["1.20.1"])
 
+    extra_meta_deps = []
+    for dep in _deps_for_loader(mod, "forge"):
+        if dep.mod_id and dep.required:
+            extra_meta_deps.append(f"""
+[[dependencies.{mod.mod_id}]]
+    modId="{dep.mod_id}"
+    mandatory=true
+    versionRange="{dep.version_range}"
+    ordering="{dep.ordering}"
+    side="{dep.side}"
+""")
+
     deps = f"""
 [[dependencies.{mod.mod_id}]]
     modId="forge"
@@ -1659,6 +1745,7 @@ def _write_resources(mod, res_root: Path):
     ordering="NONE"
     side="BOTH"
 """
+    deps += "".join(extra_meta_deps)
 
     mods_toml = f"""\
 modLoader="javafml"
@@ -1841,7 +1928,7 @@ description="{mod.description}"
 
 def _write_gradle_files(mod, project_dir: Path):
     mc = mod.minecraft_version
-    use_geckolib = bool(_blocks_with_geo_animation(mod))
+    use_geckolib = _uses_geckolib(mod)
     version_map = {
         "1.20.1": {
             "forge": "47.4.18",
@@ -1861,6 +1948,8 @@ def _write_gradle_files(mod, project_dir: Path):
     if mc not in version_map:
         raise ValueError(f"Forge does not support minecraft_version={mc!r} in this generator.")
     v = version_map[mc]
+    extra_repos = _forge_repository_lines(mod)
+    extra_deps = [_forge_dependency_line(dep, mc) for dep in _deps_for_loader(mod, "forge")]
 
     if mc == "1.21.1":
         build_gradle = f"""\
@@ -1907,12 +1996,14 @@ repositories {{
     maven fg.forgeMaven
     maven fg.minecraftLibsMaven
     {"maven { url = 'https://dl.cloudsmith.io/public/geckolib3/geckolib/maven/' }" if use_geckolib else ""}
+{chr(10).join(extra_repos)}
     mavenCentral()
 }}
 
 dependencies {{
     implementation minecraft.dependency('net.minecraftforge:forge:{mc}-{v["forge"]}')
     {"implementation fg.deobf('software.bernie.geckolib:geckolib-forge-" + mc + ":" + v["geckolib"] + "')" if use_geckolib else ""}
+{chr(10).join(extra_deps)}
 }}
 
 tasks.withType(JavaCompile).configureEach {{
@@ -1984,12 +2075,14 @@ minecraft {{
 
 repositories {{
     {"maven { url = 'https://dl.cloudsmith.io/public/geckolib3/geckolib/maven/' }" if use_geckolib else ""}
+{chr(10).join(extra_repos)}
     mavenCentral()
 }}
 
 dependencies {{
     minecraft 'net.minecraftforge:forge:{mc}-{v["forge"]}'
     {"implementation fg.deobf('software.bernie.geckolib:geckolib-forge-" + mc + ":" + v["geckolib"] + "')" if use_geckolib else ""}
+{chr(10).join(extra_deps)}
 }}
 
 jar {{

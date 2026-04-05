@@ -1,82 +1,82 @@
 # Mod API
 
-`mc.Mod(...)` is the root object for a mod definition.
+`mc.Mod(...)` is the root of a FabricPy mod. Everything else hangs off it.
 
-Constructor arguments:
+## Constructor
 
-- `mod_id`: lowercase identifier used for registry names and asset/data paths
-- `name`: display name shown in the mod list
-- `version`: mod version string, default `1.0.0`
-- `description`: short description
-- `authors`: list of author names
-- `minecraft_version`: target Minecraft version, default `1.20.1`
+```python
+mod = mc.Mod(
+    mod_id="playtime",
+    name="Playtime",
+    version="1.0",
+    description="Poppy Playtime demo mod",
+    authors=["TheDJStudios"],
+    minecraft_version="1.20.1",
+    loader="both",
+    package="com.generated.playtime",
+    website="",
+    license="MIT",
+)
+```
+
+## Constructor Fields
+
+- `mod_id`: lowercase identifier used for registries, assets, lang keys, and generated file names
+- `name`: human-facing mod name
+- `version`: version string used in generated metadata and jar names
+- `description`: short loader/mod-list description
+- `authors`: list of author strings
+- `minecraft_version`: currently `1.20.1` or `1.21.1`
 - `loader`: `fabric`, `forge`, `both`, or `all`
-- `package`: Java package root, defaults to `com.generated.<mod_id>`
-- `website`: optional homepage URL
-- `license`: license string, default `MIT`
+- `package`: optional Java package root; defaults to `com.generated.<mod_id>`
+- `website`: optional URL
+- `license`: optional license string
 
-Main methods:
+## Registration
 
-- `mod.register(cls)`: register a `mc.Block`, `mc.Item`, `mc.Entity`, or `mc.Mixin`
-- `mod.event(name)`: register a mod event handler
-- `mod.command(name, permission_level=0, aliases=None)`: register a slash command
-- `mod.add_recipe(recipe_id, data)`: register raw recipe JSON
-- `mod.shaped_recipe(recipe_id, result, pattern, key, count=1)`: register a shaped recipe
-- `mod.shapeless_recipe(recipe_id, result, ingredients, count=1)`: register a shapeless recipe
-- `mod.add_advancement(...)`: register an advancement from Python fields
-- `mod.add_advancement_json(advancement_id, data)`: register raw advancement JSON
-- `mod.item_advancement(...)`: register a simple inventory-based advancement
-- `mod.add_sound(sound_id, sounds, subtitle="", replace=False)`: register a sound event for `sounds.json`
-- `mod.creative_tab(tab_id, title, icon_item)`: create a custom creative tab builder
-- `mod.keybind(keybind_id, title, key, category="", category_title="")`: define a client keybind
-- `mod.add_dimension_type(type_id, data)`: register a dimension type JSON
-- `mod.add_dimension(dimension_id, dimension_type, generator=None, data=None)`: register a dimension JSON
-- `mod.add_structure(structure_id, nbt_path)`: copy an NBT structure template into the generated datapack
-- `mod.compile(output_dir="./dist", clean=False)`: generate projects and build jars
+Supported registration targets:
 
-Useful patterns:
+- `mc.Block`
+- `mc.Item`
+- `mc.Entity`
+- `mc.Mixin`
 
-- blocks that need persistent editable state should use `uses_block_data = True`
-- global gameplay hooks such as `player_use_item`, `player_use_block`, `player_tick`, `player_attack_entity`, and `player_interact_entity` are registered through `mod.event(...)`
-- runtime visual changes are currently done by swapping to another compiled block or variant block id, not by arbitrary live texture mutation
-- advancements are emitted into `data/<modid>/advancements/...`
-- creative tab titles are emitted into `assets/<modid>/lang/en_us.json`
-
-Registration styles:
+Direct style:
 
 ```python
 mod.register(MyBlock)
+```
 
+Decorator style:
+
+```python
 @mod.register
 class MyItem(mc.Item):
     item_id = "my_item"
 ```
 
-The same registration API is used for entities:
+If a class is not registered, it will not be counted during compile and it will not be generated into the loader project.
 
-```python
-@mod.register
-class MyEntity(mc.Entity):
-    entity_id = "my_entity"
-```
+## Major APIs
 
-Example:
+- `mod.event(...)`
+- `mod.command(...)`
+- `mod.add_recipe(...)`
+- `mod.shaped_recipe(...)`
+- `mod.shapeless_recipe(...)`
+- `mod.add_advancement(...)`
+- `mod.add_advancement_json(...)`
+- `mod.item_advancement(...)`
+- `mod.add_sound(...)`
+- `mod.creative_tab(...)`
+- `mod.keybind(...)`
+- `mod.dependency(...)`
+- `mod.add_dimension_type(...)`
+- `mod.add_dimension(...)`
+- `mod.add_structure(...)`
+- `mod.compile(...)`
 
-```python
-import fabricpy as mc
-
-mod = mc.Mod(
-    mod_id="mymod",
-    name="My Mod",
-    version="1.0.0",
-    description="Example mod",
-    authors=["You"],
-    minecraft_version="1.20.1",
-    loader="both",
-)
-```
-
-Full starter example:
+## Minimal Starter Mod
 
 ```python
 import fabricpy as mc
@@ -84,9 +84,6 @@ import fabricpy as mc
 mod = mc.Mod(
     mod_id="examplemod",
     name="Example Mod",
-    version="1.0.0",
-    description="Example content pack",
-    authors=["You"],
     minecraft_version="1.20.1",
     loader="both",
 )
@@ -95,17 +92,13 @@ mod = mc.Mod(
 @mod.register
 class ExampleItem(mc.Item):
     item_id = "example_item"
-    display_name = "Example Item"
     texture = "tools/example_item"
 
 
 @mod.register
 class ExampleBlock(mc.Block):
     block_id = "example_block"
-    display_name = "Example Block"
     texture = "machines/example_block"
-    hardness = 2.0
-    resistance = 4.0
 
 
 @mod.event("player_join")
@@ -113,18 +106,40 @@ def on_join(ctx):
     ctx.player.send_message("Example Mod loaded")
 
 
-mod.shapeless_recipe(
-    "example_item",
-    result="examplemod:example_item",
-    ingredients=[{"item": "minecraft:iron_ingot"}],
-)
-
-
 if __name__ == "__main__":
     mod.compile()
 ```
 
-Advancement example:
+## Recipes
+
+Raw JSON:
+
+```python
+mod.add_recipe("parts/gear", {
+    "type": "minecraft:crafting_shaped",
+    "pattern": [" I ", "IRI", " I "],
+    "key": {
+        "I": {"item": "minecraft:iron_ingot"},
+        "R": {"item": "minecraft:redstone"}
+    },
+    "result": {"item": "mymod:gear", "count": 1}
+})
+```
+
+Convenience helper:
+
+```python
+mod.shapeless_recipe(
+    "scanner_core",
+    result="playtime:hand_scanner",
+    ingredients=[
+        {"item": "minecraft:iron_ingot"},
+        {"item": "minecraft:redstone"},
+    ],
+)
+```
+
+## Advancements
 
 ```python
 mod.item_advancement(
@@ -132,49 +147,55 @@ mod.item_advancement(
     title="Field Kit",
     description="Obtain a hand scanner.",
     icon_item="playtime:hand_scanner",
-    parent="playtime:story/root",
+    parent="minecraft:story/root",
 )
 ```
 
-Creative tab example:
+## Creative Tabs
 
 ```python
-tools_tab = mod.creative_tab(
-    tab_id="tools",
-    title="Playtime Tools",
-    icon_item="playtime:hand_scanner",
+playtime_tab = mod.creative_tab(
+    tab_id="playtime_tab",
+    title="Playtime",
+    icon_item="playtime:grabpack_cannon",
 )
 
-tools_tab.item.add("playtime:hand_scanner")
-tools_tab.item.add("minecraft:redstone")
+playtime_tab.item.add("playtime:hand_scanner")
+playtime_tab.item.add("playtime:scanner_relay")
+playtime_tab.item.add("playtime:grabpack_cannon")
 ```
 
-Sound example:
+## Keybinds
 
 ```python
-mod.add_sound(
-    "machines/alarm",
-    "machines/alarm",
-    subtitle="Alarm sounding",
-)
-```
-
-Keybind example:
-
-```python
-scanner_bind = mod.keybind(
-    keybind_id="open_scanner",
-    title="Open Scanner",
+scanner_ping = mod.keybind(
+    keybind_id="scanner_ping",
+    title="Scanner Ping",
     key="R",
     category_title="Playtime Controls",
 )
 
-@scanner_bind.on_press
-def on_open_scanner(ctx):
-    ctx.player.send_action_bar("Scanner opened")
+@scanner_ping.on_press
+def on_scanner_ping(ctx):
+    ctx.player.send_action_bar("Scanner pulse primed")
 ```
 
-Dimension example:
+## Dependencies
+
+```python
+mod.dependency(
+    coordinate="com.simibubi.create:create-fabric-1.20.1:0.5.1",
+    loader="fabric",
+    scope="modImplementation",
+    repo="https://maven.tterrag.com/",
+    mod_id="create",
+    required=True,
+)
+```
+
+See [dependencies.md](./dependencies.md) and [interop.md](./interop.md) for the advanced side of this system.
+
+## Dimensions and Structures
 
 ```python
 mod.add_dimension_type("pocket", {
@@ -195,18 +216,26 @@ mod.add_dimension_type("pocket", {
 })
 ```
 
-Generated project layout:
+```python
+mod.add_structure("rooms/test_room", "structures/test_room.nbt")
+```
 
-- jars are copied to `dist/` by default
-- generated projects live under `.fabricpy_build/`
-- repo assets are sourced from `assets/<modid>/...`
-- repo data files are sourced from `data/<modid>/...`
-- dimension JSON goes under `data/<modid>/dimension_type` and `data/<modid>/dimension`
-- structure NBT files go under `data/<modid>/structures`
+## Compile
 
-Loader matrix:
+```python
+if __name__ == "__main__":
+    mod.compile()
+```
 
-- `1.20.1`: `fabric`, `forge`
-- `1.21.1`: `fabric`, `forge`
-- `both`: always means `fabric+forge`
-- `all`: also resolves to `fabric+forge`
+Optional output directory:
+
+```python
+mod.compile(output_dir="./out")
+```
+
+## Practical Notes
+
+- if you define a class but do not register it, the compiler ignores it
+- if a block needs persistent state, use `uses_block_data = True`
+- if a block needs GeckoLib animation, use `geo_model`, `geo_texture`, and `geo_animations`
+- if you need dependency API exploration, declare dependencies or use a feature that causes them to be added, then inspect `.fabricpy_meta/python_stubs/dep/...`

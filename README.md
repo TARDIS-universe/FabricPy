@@ -19,6 +19,9 @@ Docs:
 - `docs/creative-tabs.md`
 - `docs/keybinds.md`
 - `docs/animations.md`
+- `docs/dependencies.md`
+- `docs/interop.md`
+- `docs/demo.md`
 - `docs/sounds.md`
 - `docs/dimensions.md`
 - `docs/structures.md`
@@ -29,6 +32,7 @@ Docs:
 - `docs/mixins.md`
 - `docs/decorators.md`
 - `docs/context.md`
+- `docs/roadmap.md`
 
 Project source assets and data now live in:
 
@@ -53,6 +57,7 @@ Content support now includes:
 - block entities through `has_block_entity=True` and `@mc.on_tick`
 - persistent block data through `uses_block_data=True`
 - normal entities through `mc.Entity`
+- partial dependency jar scanning and generated Python stub output after successful builds
 
 The Python ctx surface now also includes:
 
@@ -96,6 +101,13 @@ Runtime appearance note:
 - block data can drive logic and remember choices
 - arbitrary hot-swapping of a block's texture/model/emissive assets is still not a generic cross-loader runtime feature
 - the reliable current approach is to swap the block to another compiled block or block variant when you want visual changes
+
+Interop output note:
+
+- successful builds now emit `.fabricpy_meta/symbol_index.json`
+- successful builds now emit `.fabricpy_meta/python_stubs/dep/<alias>/...`
+- this is a discovery layer for dependency APIs, with public class/method/field surfaces, not full direct imported interop yet
+- there is also an experimental low-level `dep.<alias>...` passthrough path for direct dependency class references
 
 JDK selection is version-aware:
 

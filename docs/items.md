@@ -1,32 +1,25 @@
 # Items
 
-Create an item by subclassing `mc.Item` and registering it with the mod.
+Items have three important tiers:
+
+- ordinary generated items
+- custom-model items
+- items that carry appearance/runtime state on the stack
+
+## Minimal Item
 
 ```python
 @mod.register
-class Pickle(mc.Item):
-    item_id = "pickle"
-    display_name = "Pickle"
-    max_stack_size = 64
-    max_damage = 0
-    rarity = "epic"
-    fireproof = False
-    food_hunger = 4
-    food_saturation = 6
-    food_always_edible = True
-    is_tool = False
-    tool_type = ""
-    tool_material = "iron"
+class Gear(mc.Item):
+    item_id = "gear"
+    display_name = "Gear"
+    texture = "parts/gear"
 ```
 
-Registry fields:
+## Core Fields
 
-- `item_id`: required registry id
-- `display_name`: optional in-game name
-- `namespace`: set automatically from `mod_id`
-
-Gameplay fields:
-
+- `item_id`
+- `display_name`
 - `max_stack_size`
 - `max_damage`
 - `rarity`
@@ -37,44 +30,34 @@ Gameplay fields:
 - `is_tool`
 - `tool_type`
 - `tool_material`
+- `texture`
+- `emissive_texture`
+- `emissive_level`
+- `textures`
+- `model`
 
-Asset fields:
+## Texture Resolution
 
-- `texture`: shortcut for a default generated item model `layer0`
-- `emissive_texture`: optional overlay texture used for emissive parts
-- `emissive_level`: emissive authoring value from `1` to `255`
-- `textures`: full item model texture map override
-- `model`: full item model JSON override
-
-Asset path behavior:
-
-- `texture = "food/pickle"` resolves to `assets/<modid>/textures/item/food/pickle.png`
-- `emissive_texture = "food/pickle_glow"` resolves to `assets/<modid>/textures/item/food/pickle_glow.png`
-- the generated default item model uses `layer0: "<modid>:item/food/pickle"`
-- if `emissive_texture` is set, the generated default item model also adds `layer1`
-- if you provide a manual `model`, you are responsible for writing the correct item texture id yourself
-
-Emissive note:
-
-- item emissive textures are currently emitted as an additional model layer
-- that preserves the separate texture workflow and UV alignment
-- true fullbright item rendering is still not guaranteed across every loader without a custom renderer
-
-Hooks:
-
-- `@mc.on_right_click`
-
-Minimal item:
+This Python:
 
 ```python
-@mod.register
-class Gear(mc.Item):
-    item_id = "gear"
-    display_name = "Gear"
-    texture = "parts/gear"
+texture = "food/pickle"
 ```
 
-Food item:
+means:
+
+- source PNG: `assets/<modid>/textures/item/food/pickle.png`
+- generated model texture id: `<modid>:item/food/pickle`
+
+Common mistake:
+
+- writing `<modid>:food/pickle` in a manual item model
+
+Correct value:
+
+- `<modid>:item/food/pickle`
+
+## Food Item Example
 
 ```python
 @mod.register
@@ -87,38 +70,30 @@ class Pickle(mc.Item):
     food_always_edible = True
 ```
 
-Single-stack tool item:
+## Custom Model Item Example
 
 ```python
 @mod.register
-class HandScanner(mc.Item):
-    item_id = "hand_scanner"
-    display_name = "Hand Scanner"
-    texture = "tools/hand_scanner"
-    max_stack_size = 1
-    rarity = "rare"
-```
-
-Custom model item:
-
-```python
-@mod.register
-class GrabPack(mc.Item):
+class GrabPackCannon(mc.Item):
     item_id = "grabpack_cannon"
-    display_name = "Grabpack Cannon"
+    display_name = "GrabPack Cannon"
     max_stack_size = 1
+    rarity = "epic"
     model = {
         "parent": "playtime:item/tool/grabpack"
     }
 ```
 
-Item with right-click behavior:
+## Right-Click Hook
+
+Items support:
+
+- `@mc.on_right_click`
 
 ```python
 @mod.register
 class TeleportAnchor(mc.Item):
     item_id = "teleport_anchor"
-    display_name = "Teleport Anchor"
     texture = "tools/teleport_anchor"
 
     @mc.on_right_click
@@ -128,47 +103,13 @@ class TeleportAnchor(mc.Item):
             ctx.player.send_action_bar("Teleported")
 ```
 
-Item appearance state example:
+## Stack Appearance Data
 
-```python
-@mod.register
-class PaintGun(mc.Item):
-    item_id = "paint_gun"
-    display_name = "Paint Gun"
-    texture = "tools/paint_gun"
+Stacks can store appearance keys:
 
-    @mc.on_right_click
-    def on_right_click(self, ctx):
-        ctx.stack.texture_change("playtime:item/tools/paint_gun_red")
-        ctx.stack.model_change("playtime:item/tools/paint_gun_red")
-```
+- `ctx.stack.texture_change(texture_id)`
+- `ctx.stack.model_change(model_id)`
+- `ctx.stack.get_texture()`
+- `ctx.stack.get_model()`
 
-Example with assets:
-
-```python
-@mod.register
-class Pickle(mc.Item):
-    item_id = "pickle"
-    texture = "food/pickle"
-```
-
-That `texture` value resolves to:
-
-- `assets/<modid>/textures/item/food/pickle.png`
-
-Equivalent generated model:
-
-```json
-{
-  "parent": "minecraft:item/generated",
-  "textures": {
-    "layer0": "<modid>:item/food/pickle"
-  }
-}
-```
-
-Common mistake:
-
-- writing a manual item model with `"<modid>:food/pickle"`
-- item textures need the `item/` segment
-- the correct value is `"<modid>:item/food/pickle"`
+These helpers are useful for stateful items and future render systems, but they are not yet a guaranteed universal live item-render mutation path on their own.

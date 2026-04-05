@@ -1,85 +1,149 @@
 # Building
 
+`fabricpy` generates a real loader project under `.fabricpy_build/`, then runs Gradle to produce jars in `dist/`.
+
+That means there are always two layers to keep in mind:
+
+- your Python mod source
+- the generated Fabric/Forge projects and their normal Java/Gradle build rules
+
 ## Requirements
 
-- Python 3.10+
-- Java 17+ for `1.20.1`
-- Java 21+ for `1.21.1`
-- Gradle available for first-time wrapper setup, or an existing `gradle-wrapper.jar`
+- Python `3.10+`
+- Java `17` for Minecraft `1.20.1`
+- Java `21` for Minecraft `1.21.1`
+- Gradle available for the first wrapper bootstrap, or an existing wrapper jar that can be reused
 
-`fabricpy` now prefers a matching installed JDK for the selected Minecraft version.
+## JDK Selection
 
-JDK selection:
+`fabricpy` now tries to pick a matching JDK automatically.
 
-- `1.20.1` prefers Java 17
-- `1.21.1` prefers Java 21
-- if both are installed side by side, `fabricpy` will try to pick the matching one automatically
-- `JAVA_HOME` still works, but it no longer has to be the only way to switch versions
+Version rules:
 
-## Supported Matrix
+- Minecraft `1.20.1` prefers Java `17`
+- Minecraft `1.21.1` prefers Java `21`
 
-- `1.20.1`: Fabric, Forge
-- `1.21.1`: Fabric, Forge
+Discovery order:
 
-Gradle wrapper selection:
+- `JAVA_HOME`
+- `JDK*_HOME` environment variables
+- common Windows JDK install locations
+- `PATH`
 
-- Fabric projects use Gradle `8.8`
-- Forge `1.20.1` projects use Gradle `8.8`
-- Forge `1.21.1` projects use Gradle `9.3.0`
-- `fabricpy` selects the wrapper version automatically per generated loader project
+Important note:
 
-What this means in practice:
+- you can install Java 17 and Java 21 side by side
+- `fabricpy` will try to choose the correct one for the selected Minecraft version
+- this is better than manually swapping JDKs on and off `PATH`
 
-- you do not need to manually swap Gradle versions between loaders
-- you can keep Java 17 and Java 21 installed side by side
-- `fabricpy` chooses Java by Minecraft version and Gradle by loader/version combination
-- `JAVA_HOME` still overrides the shell, but `fabricpy` will try to pick a matching JDK on its own
+## Gradle Selection
 
-## Commands
+Gradle wrapper selection is automatic per loader/version combination:
 
-Build the example mod:
+- Fabric `1.20.1`: Gradle `8.8`
+- Fabric `1.21.1`: Gradle `8.8`
+- Forge `1.20.1`: Gradle `8.8`
+- Forge `1.21.1`: Gradle `9.3.0`
 
-```powershell
-python .\examples\tardis_mod.py
+## Basic Compile Flow
+
+Minimal pattern:
+
+```python
+import fabricpy as mc
+
+mod = mc.Mod(
+    mod_id="examplemod",
+    name="Example Mod",
+    minecraft_version="1.20.1",
+    loader="both",
+)
+
+if __name__ == "__main__":
+    mod.compile()
 ```
 
-Clean build:
+Run it from PowerShell:
 
 ```powershell
-python .\examples\tardis_mod.py --clean
+python .\my_mod.py
 ```
 
-Generate source only:
+## What `mod.compile()` Actually Does
 
-```powershell
-python .\examples\tardis_mod.py --dry-run
-```
+1. validates the Python mod definition
+2. resolves target loaders from `loader` and `minecraft_version`
+3. generates loader projects in `.fabricpy_build/<modid>-fabric` and/or `.fabricpy_build/<modid>-forge`
+4. copies repo `assets/` and `data/` into generated resources
+5. runs Gradle builds in each generated project
+6. copies built jars into `dist/`
+7. emits interop metadata and dependency stub output under `.fabricpy_meta/`
 
-Custom output directory:
+## Generated Output
 
-```powershell
-python .\examples\tardis_mod.py --output .\out
-```
+Per-loader generated projects:
 
-## Output
-
-Generated projects:
-
-- `.fabricpy_build\<modid>-fabric\`
-- `.fabricpy_build\<modid>-forge\`
+- `.fabricpy_build/<modid>-fabric/`
+- `.fabricpy_build/<modid>-forge/`
 
 Built jars:
 
-- `dist\<fabric-jar>`
-- `dist\<forge-jar>`
+- `dist/<modid>-<version>.jar`
+- `dist/<modid>-forge-<version>.jar`
+
+Interop/compiler metadata:
+
+- `.fabricpy_build/<modid>-<loader>/.fabricpy_meta/interop_project.json`
+- `.fabricpy_build/<modid>-<loader>/.fabricpy_meta/symbol_index.stub.json`
+- `.fabricpy_build/<modid>-<loader>/.fabricpy_meta/symbol_index.json`
+- `.fabricpy_build/<modid>-<loader>/.fabricpy_meta/python_stubs/dep/...`
+
+## Repo Asset and Data Layout
+
+Textures, models, blockstates, lang, and sounds should live under:
+
+- `assets/<modid>/textures/...`
+- `assets/<modid>/models/...`
+- `assets/<modid>/blockstates/...`
+- `assets/<modid>/lang/...`
+- `assets/<modid>/sounds.json`
+- `assets/<modid>/sounds/...`
+
+Recipes, advancements, dimensions, and structures should live under:
+
+- `data/<modid>/recipes/...`
+- `data/<modid>/advancements/...`
+- `data/<modid>/dimension_type/...`
+- `data/<modid>/dimension/...`
+- `data/<modid>/structures/...`
 
 ## Troubleshooting
 
-- Fabric `1.21.1` item texture is missing:
-  check the generated or overridden item model and make sure it points at `<modid>:item/...`
-- block renders but break particles are wrong:
-  check the final block model JSON for a `particle` texture entry
-- Python fields look correct but Minecraft still uses the wrong model:
-  a repo file under `assets/<modid>/models/...` or `assets/<modid>/blockstates/...` may be overriding the generated JSON
-- build uses the wrong Java:
-  verify both JDKs are installed and let `fabricpy` pick by version, or set `JAVA_HOME` explicitly for that shell
+### Wrong Java version
+
+- Java 17 installed for `1.20.1`
+- Java 21 installed for `1.21.1`
+- `JAVA_HOME` is not forcing the wrong JDK globally
+
+### Wrong model or texture in-game
+
+Most common cause:
+
+- a manual file under `assets/<modid>/models/...` or `assets/<modid>/blockstates/...` is overriding the generated JSON
+
+### Missing block particles
+
+Cause:
+
+- manual block model JSON is missing a `particle` texture entry
+
+### Item texture missing
+
+Cause:
+
+- manual model uses `<modid>:food/foo` instead of `<modid>:item/foo`
+
+### Dependency interop output missing
+
+- the build may have had no scan-worthy dependency jars
+- non-geo builds with no explicit dependencies will often have an empty dependency symbol index, which is expected

@@ -10,6 +10,7 @@ This page is now just a pointer to the split API docs:
 - [creative-tabs.md](./creative-tabs.md)
 - [keybinds.md](./keybinds.md)
 - [animations.md](./animations.md)
+- [dependencies.md](./dependencies.md)
 - [sounds.md](./sounds.md)
 - [dimensions.md](./dimensions.md)
 - [structures.md](./structures.md)
@@ -20,3 +21,4 @@ This page is now just a pointer to the split API docs:
 - [mixins.md](./mixins.md)
 - [decorators.md](./decorators.md)
 - [context.md](./context.md)
+- [roadmap.md](./roadmap.md)
