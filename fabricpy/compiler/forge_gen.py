@@ -264,7 +264,7 @@ def _copy_tree_if_exists(src: Path, dest: Path):
 def _blocks_with_block_entities(mod: "Mod") -> list:
     return [
         block for block in mod._blocks
-        if block.has_block_entity or getattr(block, "uses_block_data", False) or "on_tick" in block.get_hooks()
+        if block.has_block_entity or getattr(block, "uses_block_data", False) or bool(getattr(block, "geo_model", "")) or "on_tick" in block.get_hooks()
     ]
 
 
@@ -273,6 +273,37 @@ def _blocks_requiring_cutout(mod: "Mod") -> list:
         block for block in mod._blocks
         if (not block.opaque) or bool(getattr(block, "emissive_texture", ""))
     ]
+
+
+def _blocks_with_geo_animation(mod: "Mod") -> list:
+    return [block for block in mod._blocks if bool(getattr(block, "geo_model", ""))]
+
+
+def _resource_location_parts(mod_id: str, ref: str, prefix: str, default_id: str, suffix: str) -> tuple[str, str]:
+    clean = (ref or "").strip()
+    if ":" in clean:
+        namespace, path = clean.split(":", 1)
+    else:
+        namespace, path = mod_id, clean
+    if not path:
+        path = default_id
+    if prefix and not path.startswith(f"{prefix}/"):
+        path = f"{prefix}/{path}"
+    if suffix and not path.endswith(suffix):
+        path = f"{path}{suffix}"
+    return namespace, path
+
+
+def _geo_model_parts(mod_id: str, block) -> tuple[str, str]:
+    return _resource_location_parts(mod_id, getattr(block, "geo_model", ""), "geo", block.block_id, ".geo.json")
+
+
+def _geo_texture_parts(mod_id: str, block) -> tuple[str, str]:
+    return _resource_location_parts(mod_id, getattr(block, "geo_texture", "") or getattr(block, "texture", ""), "textures/block", block.block_id, ".png")
+
+
+def _geo_animation_parts(mod_id: str, block) -> tuple[str, str]:
+    return _resource_location_parts(mod_id, getattr(block, "geo_animations", ""), "animations", block.block_id, ".animation.json")
 
 
 def _keybind_code_expr(keybind) -> str:
@@ -323,6 +354,7 @@ def generate_forge_project(mod: "Mod", project_dir: Path):
     _write_mod_creative_tabs(mod, java_root, pkg)
     _write_mod_keybinds(mod, java_root, pkg, transpiler)
     _write_mod_entities(mod, java_root, pkg)
+    _write_geo_block_renderers(mod, java_root, pkg)
     _write_block_classes(mod, java_root, pkg, transpiler)
     _write_item_classes(mod, java_root, pkg, transpiler)
     _write_entity_classes(mod, java_root, pkg, transpiler)
@@ -339,6 +371,7 @@ def _write_main_class(mod, java_root: Path, pkg: str):
     has_block_entities = bool(_blocks_with_block_entities(mod))
     has_creative_tabs = bool(mod._creative_tabs)
     has_keybinds = bool(mod._keybinds)
+    has_geo_blocks = bool(_blocks_with_geo_animation(mod))
     cutout_blocks = _blocks_requiring_cutout(mod)
 
     imports = []
@@ -352,6 +385,23 @@ def _write_main_class(mod, java_root: Path, pkg: str):
         imports.append(f"import {pkg}.blockentity.ModBlockEntities;")
     if has_keybinds:
         imports.append(f"import {pkg}.client.ModKeybinds;")
+    if has_geo_blocks:
+        imports.append(f"import {pkg}.client.ModGeoBlockRenderers;")
+
+    client_setup_lines = [
+        *(f"            ItemBlockRenderTypes.setRenderLayer(ModBlocks.{block.block_id.upper()}.get(), RenderType.cutout());" for block in cutout_blocks),
+        *(["            ModGeoBlockRenderers.registerClient();"] if has_geo_blocks else []),
+        *(["            // Keybinds register through ModKeybinds on the client bus."] if has_keybinds else []),
+    ]
+    client_setup_code = ""
+    if cutout_blocks or has_keybinds or has_geo_blocks:
+        client_setup_code = (
+            "public void onClientSetup(FMLClientSetupEvent event) {\n"
+            "        event.enqueueWork(() -> {\n"
+            + "\n".join(client_setup_lines) +
+            "\n        });\n"
+            "    }"
+        )
 
     src = f"""\
 package {pkg};
@@ -388,14 +438,14 @@ public class {class_name} {{
         {"bus.addListener(ModBlocks::addCreative);" if mod._blocks else ""}
         {"bus.addListener(ModItems::addCreative);" if mod._items else ""}
         {"bus.addListener(ModEntities::registerAttributes);" if mod._entities else ""}
-        {"bus.addListener(this::onClientSetup);" if (cutout_blocks or has_keybinds) else ""}
+        {"bus.addListener(this::onClientSetup);" if (cutout_blocks or has_keybinds or has_geo_blocks) else ""}
 
         // Register command events on Forge's main bus
         {"net.minecraftforge.common.MinecraftForge.EVENT_BUS.register(ModCommands.class);" if mod._commands else "// No commands"}
         {"net.minecraftforge.common.MinecraftForge.EVENT_BUS.register(ModEvents.class);" if mod._events else ""}
     }}
 
-    {"public void onClientSetup(FMLClientSetupEvent event) {\n        event.enqueueWork(() -> {\n" + chr(10).join([f"            ItemBlockRenderTypes.setRenderLayer(ModBlocks.{block.block_id.upper()}.get(), RenderType.cutout());" for block in cutout_blocks]) + ("\n            // Keybinds register through ModKeybinds on the client bus." if has_keybinds else "") + "\n        });\n    }" if (cutout_blocks or has_keybinds) else ""}
+    {client_setup_code}
 }}
 """
     _write_text(java_root / f"{class_name}.java", src)
@@ -662,6 +712,82 @@ public class ModKeybinds {{
     _write_text(client_dir / "ModKeybinds.java", src)
 
 
+def _write_geo_block_renderers(mod, java_root: Path, pkg: str):
+    geo_blocks = _blocks_with_geo_animation(mod)
+    if not geo_blocks:
+        return
+    client_dir = java_root / "client"
+    client_dir.mkdir(exist_ok=True)
+    model_dir = client_dir / "model"
+    model_dir.mkdir(exist_ok=True)
+    renderer_dir = client_dir / "renderer"
+    renderer_dir.mkdir(exist_ok=True)
+
+    registration_lines = []
+    for block in geo_blocks:
+        cn = block.get_class_name()
+        model_cn = f"{cn}GeoModel"
+        renderer_cn = f"{cn}GeoRenderer"
+        model_ns, model_path = _geo_model_parts(mod.mod_id, block)
+        tex_ns, tex_path = _geo_texture_parts(mod.mod_id, block)
+        anim_ns, anim_path = _geo_animation_parts(mod.mod_id, block)
+
+        model_src = f"""\
+package {pkg}.client.model;
+
+import {pkg}.blockentity.{cn}BlockEntity;
+import net.minecraft.resources.ResourceLocation;
+import software.bernie.geckolib.model.GeoModel;
+
+public class {model_cn} extends GeoModel<{cn}BlockEntity> {{
+    @Override
+    public ResourceLocation getModelResource({cn}BlockEntity animatable) {{
+        return new ResourceLocation("{model_ns}", "{model_path}");
+    }}
+
+    @Override
+    public ResourceLocation getTextureResource({cn}BlockEntity animatable) {{
+        return new ResourceLocation("{tex_ns}", "{tex_path}");
+    }}
+
+    @Override
+    public ResourceLocation getAnimationResource({cn}BlockEntity animatable) {{
+        return new ResourceLocation("{anim_ns}", "{anim_path}");
+    }}
+}}
+"""
+        _write_text(model_dir / f"{model_cn}.java", model_src)
+
+        renderer_src = f"""\
+package {pkg}.client.renderer;
+
+import {pkg}.blockentity.{cn}BlockEntity;
+import {pkg}.client.model.{model_cn};
+import software.bernie.geckolib.renderer.GeoBlockRenderer;
+
+public class {renderer_cn} extends GeoBlockRenderer<{cn}BlockEntity> {{
+    public {renderer_cn}() {{
+        super(new {model_cn}());
+    }}
+}}
+"""
+        _write_text(renderer_dir / f"{renderer_cn}.java", renderer_src)
+        registration_lines.append(
+            f"        net.minecraft.client.renderer.blockentity.BlockEntityRenderers.register({pkg}.blockentity.ModBlockEntities.{block.block_id.upper()}.get(), context -> new {pkg}.client.renderer.{renderer_cn}());"
+        )
+
+    register_src = f"""\
+package {pkg}.client;
+
+public class ModGeoBlockRenderers {{
+    public static void registerClient() {{
+{chr(10).join(registration_lines)}
+    }}
+}}
+"""
+    _write_text(client_dir / "ModGeoBlockRenderers.java", register_src)
+
+
 def _write_mod_entities(mod, java_root: Path, pkg: str):
     if not mod._entities:
         return
@@ -727,7 +853,7 @@ def _write_block_classes(mod, java_root: Path, pkg: str, transpiler: JavaTranspi
 def _write_single_block(mod, block, block_dir: Path, pkg: str, transpiler: JavaTranspiler):
     cn = block.get_class_name()
     hooks = block.get_hooks()
-    has_block_entity = block.has_block_entity or getattr(block, "uses_block_data", False) or "on_tick" in hooks
+    has_block_entity = block.has_block_entity or getattr(block, "uses_block_data", False) or bool(getattr(block, "geo_model", "")) or "on_tick" in hooks
     uses_rotation = getattr(block, "variable_rotation", False)
     uses_model_shapes = uses_rotation or getattr(block, "model_collision", False)
     shape_boxes = _model_boxes_for_block(Path.cwd(), mod, block) if uses_model_shapes else {}
@@ -902,6 +1028,7 @@ import com.mojang.serialization.MapCodec;"""
                 f"        return createTickerHelper(type, ModBlockEntities.{block.block_id.upper()}.get(), "
                 f"{cn}BlockEntity::tick);"
             )
+        render_shape_return = "RenderShape.ENTITYBLOCK_ANIMATED" if getattr(block, "geo_model", "") else "RenderShape.MODEL"
         extra_methods = f"""{codec_members}
     @Override
     public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {{
@@ -910,7 +1037,7 @@ import com.mojang.serialization.MapCodec;"""
 
     @Override
     public RenderShape getRenderShape(BlockState state) {{
-        return RenderShape.MODEL;
+        return {render_shape_return};
     }}
 
     @Override
@@ -1036,6 +1163,22 @@ import net.minecraft.core.HolderLookup;"""
         }
     }
 
+    public String getAnimationName() {
+        return getStringData("__fabricpy_animation");
+    }
+
+    public void setAnimationState(String animationName, boolean loop) {
+        setStringData("__fabricpy_animation", animationName == null ? "" : animationName);
+        setBoolData("__fabricpy_animation_loop", loop);
+        syncData();
+    }
+
+    public void clearAnimationName() {
+        removeData("__fabricpy_animation");
+        removeData("__fabricpy_animation_loop");
+        syncData();
+    }
+
     @Override
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
@@ -1103,6 +1246,22 @@ import net.minecraft.core.HolderLookup;"""
         }
     }
 
+    public String getAnimationName() {
+        return getStringData("__fabricpy_animation");
+    }
+
+    public void setAnimationState(String animationName, boolean loop) {
+        setStringData("__fabricpy_animation", animationName == null ? "" : animationName);
+        setBoolData("__fabricpy_animation_loop", loop);
+        syncData();
+    }
+
+    public void clearAnimationName() {
+        removeData("__fabricpy_animation");
+        removeData("__fabricpy_animation_loop");
+        syncData();
+    }
+
     @Override
     protected void saveAdditional(CompoundTag tag) {
         super.saveAdditional(tag);
@@ -1114,6 +1273,44 @@ import net.minecraft.core.HolderLookup;"""
         super.load(tag);
         this.fabricpyData = tag.contains("fabricpy_data") ? tag.getCompound("fabricpy_data").copy() : new CompoundTag();
     }"""
+    if getattr(block, "geo_model", ""):
+        data_imports += """
+import software.bernie.geckolib.animatable.GeoBlockEntity;
+import software.bernie.geckolib.core.animatable.instance.AnimatableInstanceCache;
+import software.bernie.geckolib.core.animation.AnimatableManager;
+import software.bernie.geckolib.core.animation.AnimationController;
+import software.bernie.geckolib.core.animation.RawAnimation;
+import software.bernie.geckolib.core.object.PlayState;"""
+        default_animation = getattr(block, "default_animation", "")
+        data_methods = data_methods.replace(
+            "private CompoundTag fabricpyData = new CompoundTag();",
+            "private CompoundTag fabricpyData = new CompoundTag();\n    private final AnimatableInstanceCache geoCache = software.bernie.geckolib.util.GeckoLibUtil.createInstanceCache(this);",
+            1,
+        )
+        data_methods += f"""
+
+    @Override
+    public void registerControllers(AnimatableManager.ControllerRegistrar controllers) {{
+        controllers.add(new AnimationController<>(this, "controller", 0, state -> {{
+            String animationName = getAnimationName();
+            if ((animationName == null || animationName.isEmpty()) && !"{default_animation}".isEmpty()) {{
+                animationName = "{default_animation}";
+            }}
+            if (animationName == null || animationName.isEmpty()) {{
+                return PlayState.STOP;
+            }}
+            boolean loop = !hasData("__fabricpy_animation_loop") || getBoolData("__fabricpy_animation_loop");
+            RawAnimation animation = loop
+                ? RawAnimation.begin().thenLoop(animationName)
+                : RawAnimation.begin().thenPlay(animationName);
+            return state.setAndContinue(animation);
+        }}));
+    }}
+
+    @Override
+    public AnimatableInstanceCache getAnimatableInstanceCache() {{
+        return geoCache;
+    }}"""
     tick_method = ""
     if "on_tick" in hooks:
         body = transpiler.transpile_method(
@@ -1137,7 +1334,7 @@ import net.minecraft.world.level.block.state.BlockState;
 /**
  * Block entity backing {block.get_display_name()}.
  */
-public class {cn}BlockEntity extends BlockEntity {{
+public class {cn}BlockEntity extends BlockEntity{" implements GeoBlockEntity" if getattr(block, "geo_model", "") else ""} {{
 
     public {cn}BlockEntity(BlockPos pos, BlockState state) {{
         super(ModBlockEntities.{block.block_id.upper()}.get(), pos, state);
@@ -1644,18 +1841,21 @@ description="{mod.description}"
 
 def _write_gradle_files(mod, project_dir: Path):
     mc = mod.minecraft_version
+    use_geckolib = bool(_blocks_with_geo_animation(mod))
     version_map = {
         "1.20.1": {
             "forge": "47.4.18",
             "java": 17,
             "plugin": "6.0.51",
             "settings_plugin": "0.8.0",
+            "geckolib": "4.4.9",
         },
         "1.21.1": {
             "forge": "52.1.14",
             "java": 21,
             "plugin": "[7.0.3,8)",
             "settings_plugin": "1.0.0",
+            "geckolib": "5.0.0",
         },
     }
     if mc not in version_map:
@@ -1706,11 +1906,13 @@ repositories {{
     minecraft.mavenizer(it)
     maven fg.forgeMaven
     maven fg.minecraftLibsMaven
+    {"maven { url = 'https://dl.cloudsmith.io/public/geckolib3/geckolib/maven/' }" if use_geckolib else ""}
     mavenCentral()
 }}
 
 dependencies {{
     implementation minecraft.dependency('net.minecraftforge:forge:{mc}-{v["forge"]}')
+    {"implementation fg.deobf('software.bernie.geckolib:geckolib-forge-" + mc + ":" + v["geckolib"] + "')" if use_geckolib else ""}
 }}
 
 tasks.withType(JavaCompile).configureEach {{
@@ -1781,11 +1983,13 @@ minecraft {{
 }}
 
 repositories {{
+    {"maven { url = 'https://dl.cloudsmith.io/public/geckolib3/geckolib/maven/' }" if use_geckolib else ""}
     mavenCentral()
 }}
 
 dependencies {{
     minecraft 'net.minecraftforge:forge:{mc}-{v["forge"]}'
+    {"implementation fg.deobf('software.bernie.geckolib:geckolib-forge-" + mc + ":" + v["geckolib"] + "')" if use_geckolib else ""}
 }}
 
 jar {{

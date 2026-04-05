@@ -150,6 +150,10 @@ Block entity helpers:
 - `ctx.block_entity.texture_change(texture_id)`
 - `ctx.block_entity.get_model()`
 - `ctx.block_entity.model_change(model_id)`
+- `ctx.block_entity.get_animation()`
+- `ctx.block_entity.play_animation(name)`
+- `ctx.block_entity.play_animation_once(name)`
+- `ctx.block_entity.stop_animation()`
 - `ctx.block_entity.set_string(key, value)`
 - `ctx.block_entity.get_int(key)`
 - `ctx.block_entity.set_int(key, value)`
@@ -221,6 +225,14 @@ class Scanner(mc.Block):
             ctx.block_entity.texture_change("playtime:block/scanner_red")
             ctx.block_entity.model_change("playtime:block/scanner_red")
             ctx.block_entity.sync()
+```
+
+Animated block example:
+
+```python
+@mc.on_use
+def on_use(self, ctx):
+    ctx.block_entity.play_animation("open")
 ```
 
 Cross-dimension example:

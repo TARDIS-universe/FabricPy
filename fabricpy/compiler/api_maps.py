@@ -188,6 +188,14 @@ FABRIC_API_MAP: dict[str, str] = {
         'blockEntity.markDirty()',
     "ctx.block_entity.get_string":
         'blockEntity.getStringData({0})',
+    "ctx.block_entity.get_animation":
+        'blockEntity.getAnimationName()',
+    "ctx.block_entity.play_animation":
+        'blockEntity.setAnimationState({0}, true)',
+    "ctx.block_entity.play_animation_once":
+        'blockEntity.setAnimationState({0}, false)',
+    "ctx.block_entity.stop_animation":
+        'blockEntity.clearAnimationName()',
     "ctx.block_entity.get_texture":
         'blockEntity.getStringData("__fabricpy_texture")',
     "ctx.block_entity.texture_change":
@@ -433,6 +441,14 @@ FORGE_API_MAP: dict[str, str] = {
         'blockEntity.setChanged()',
     "ctx.block_entity.get_string":
         'blockEntity.getStringData({0})',
+    "ctx.block_entity.get_animation":
+        'blockEntity.getAnimationName()',
+    "ctx.block_entity.play_animation":
+        'blockEntity.setAnimationState({0}, true)',
+    "ctx.block_entity.play_animation_once":
+        'blockEntity.setAnimationState({0}, false)',
+    "ctx.block_entity.stop_animation":
+        'blockEntity.clearAnimationName()',
     "ctx.block_entity.get_texture":
         'blockEntity.getStringData("__fabricpy_texture")',
     "ctx.block_entity.texture_change":

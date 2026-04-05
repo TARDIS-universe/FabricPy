@@ -2,6 +2,8 @@
 
 `fabricpy` can generate default blockstate and model JSON, and you can override those defaults from Python or from repo files.
 
+For real moving or stretching model parts, use [animations.md](./animations.md). Static block and item JSON models do not provide that by themselves.
+
 Repo folders:
 
 - blockstates: `assets/<modid>/blockstates/...`

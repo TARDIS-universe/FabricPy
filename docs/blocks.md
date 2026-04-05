@@ -77,6 +77,10 @@ Asset fields:
 - `floor_model`: optional model id/path override used when `rotation_mode = "floor"`
 - `blockstate`: full blockstate JSON override
 - `item_model`: full inventory item model JSON override for the block item
+- `geo_model`: GeckoLib geo model path for animated blocks
+- `geo_texture`: GeckoLib texture path for animated blocks
+- `geo_animations`: GeckoLib animation file path for animated blocks
+- `default_animation`: default animation name for the animated block
 
 Minimal cube block:
 
@@ -173,6 +177,27 @@ class ReactorLamp(mc.Block):
     emissive_level = 191
     opaque = False
 ```
+
+Animated block example:
+
+```python
+@mod.register
+class AnimatedPanel(mc.Block):
+    block_id = "animated_panel"
+    display_name = "Animated Panel"
+    has_block_entity = True
+    opaque = False
+    geo_model = "machines/animated_panel"
+    geo_texture = "machines/animated_panel"
+    geo_animations = "machines/animated_panel"
+    default_animation = "idle"
+
+    @mc.on_use
+    def on_use(self, ctx):
+        ctx.block_entity.play_animation("open")
+```
+
+For real element motion and stretching, use the GeckoLib animation route above instead of expecting static block JSON to animate itself.
 
 Rotation and model-shape fields:
 

@@ -19,6 +19,10 @@ Class attributes (all optional except block_id):
     variable_rotation bool  Whether compiler generates north-based facing rotation (default: False)
     rotation_mode   str     "wall" or "floor" rotation handling for a north-authored model (default: "wall")
     model_collision bool    Whether collisions use model cuboids    (default: False)
+    geo_model       str     Optional GeckoLib geo model path        (default: "")
+    geo_texture     str     Optional GeckoLib texture path          (default: "")
+    geo_animations  str     Optional GeckoLib animation path        (default: "")
+    default_animation str   Optional default GeckoLib animation     (default: "")
 
 Hook decorators (import from fabricpy):
     @mc.on_use       — player right-clicks the block
@@ -67,6 +71,10 @@ class Block(metaclass=BlockMeta):
     variable_rotation: bool = False
     rotation_mode: str = "wall"
     model_collision: bool = False
+    geo_model: str = ""
+    geo_texture: str = ""
+    geo_animations: str = ""
+    default_animation: str = ""
 
     # ---- Assets ----
     texture: str = ""                   # Shortcut for cube_all texture
