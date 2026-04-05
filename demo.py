@@ -45,6 +45,11 @@ def demo_status(ctx):
     ctx.source.send_message("Demo systems online")
 
 
+@mod.command("demo_spawn_wisp")
+def demo_spawn_wisp(ctx):
+    ctx.source.run_command("summon demo:time_wisp ~ ~1 ~")
+
+
 @mod.register
 class DemoBlock(mc.Block):
     block_id = "block"
@@ -126,6 +131,41 @@ class DemoPickle(mc.Item):
     food_always_edible = True
     is_tool = False
     texture = "food/pickle"
+
+
+@mod.register
+class TimeWisp(mc.Entity):
+    entity_id = "time_wisp"
+    display_name = "Time Wisp"
+    width = 0.8
+    height = 0.8
+    tracking_range = 12
+    update_rate = 1
+    spawn_group = "ambient"
+    max_health = 12.0
+    movement_speed = 0.18
+    follow_range = 16.0
+    render_layer = "translucent"
+    shadow_radius = 0.1
+    render_scale_x = 0.85
+    render_scale_y = 0.85
+    render_scale_z = 0.85
+    render_offset_y = 0.1
+    render_tint_r = 0.85
+    render_tint_g = 0.95
+    render_tint_b = 1.0
+    render_tint_a = 0.9
+    geo_model = "mobs/time_wisp"
+    geo_texture = "mobs/time_wisp"
+    geo_animations = "mobs/time_wisp"
+    default_animation = "controller.float"
+
+    @mc.on_tick
+    def on_tick(self, ctx):
+        if ctx.entity.get_pos_y() < 60:
+            ctx.entity.play_animation("controller.rise")
+        else:
+            ctx.entity.play_animation("controller.float")
 
 
 demo_tab = mod.creative_tab(

@@ -19,6 +19,9 @@ The important mental model is:
 - `ctx.entity`
 - `ctx.server`
 - `ctx.source`
+- `ctx.client`
+- `ctx.net`
+- `ctx.math`
 - raw values such as `ctx.pos`, `ctx.state`, `ctx.hand`, `ctx.message`
 
 ## Player Helpers
@@ -93,6 +96,13 @@ def on_join(ctx):
 - `ctx.world.fill_in_dimension(dimension_id, x1, y1, z1, x2, y2, z2, block_id, mode)`
 - `ctx.world.place_structure(dimension_id, structure_id, x, y, z)`
 - `ctx.world.place_nbt(dimension_id, structure_id, x, y, z)`
+- `ctx.world.spawn_particle(particle_id, x, y, z, dx, dy, dz, speed, count)`
+- `ctx.world.spawn_particle_self(particle_id, dx, dy, dz, speed, count)`
+- `ctx.world.raycast_block(start_vec, end_vec)`
+- `ctx.world.raycast_block_id(start_vec, end_vec)`
+- `ctx.world.raycast_block_pos_x(start_vec, end_vec)`
+- `ctx.world.raycast_block_pos_y(start_vec, end_vec)`
+- `ctx.world.raycast_block_pos_z(start_vec, end_vec)`
 
 ## Stack Helpers
 
@@ -152,11 +162,41 @@ Entity:
 - `ctx.entity.discard()`
 - `ctx.entity.set_on_fire(seconds)`
 - `ctx.entity.damage(amount)`
+- `ctx.entity.get_animation()`
+- `ctx.entity.play_animation(name)`
+- `ctx.entity.play_animation_once(name)`
+- `ctx.entity.stop_animation()`
+- `ctx.entity.get_texture()`
+- `ctx.entity.texture_change(resource_id)`
+- `ctx.entity.get_model()`
+- `ctx.entity.model_change(resource_id)`
 
 Server:
 
 - `ctx.server.run_command(command)`
 - `ctx.server.reload_data()`
+
+Client:
+
+- `ctx.client.open_screen(screen_id)`
+- `ctx.client.close_screen()`
+
+Networking:
+
+- `ctx.net.send_to_server(packet_id, message)`
+- `ctx.net.send_to_player(player, packet_id, message)`
+- `ctx.net.broadcast(packet_id, message)`
+
+Math:
+
+- `ctx.math.vec3(x, y, z)`
+- `ctx.math.block_pos(x, y, z)`
+- `ctx.math.clamp(value, min, max)`
+- `ctx.math.lerp(start, end, delta)`
+- `ctx.math.distance3(x1, y1, z1, x2, y2, z2)`
+- `ctx.math.length3(x, y, z)`
+- `ctx.math.normalize3(x, y, z)`
+- `ctx.math.add3(x1, y1, z1, x2, y2, z2)`
 
 Command source:
 

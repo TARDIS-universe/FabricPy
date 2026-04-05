@@ -19,6 +19,17 @@ Class attributes (all optional except block_id):
     variable_rotation bool  Whether compiler generates north-based facing rotation (default: False)
     rotation_mode   str     "wall" or "floor" rotation handling for a north-authored model (default: "wall")
     model_collision bool    Whether collisions use model cuboids    (default: False)
+    render_layer    str     "solid","cutout","cutout_mipped","translucent" (default: "solid")
+    render_scale_x  float   Renderer X scale for geo blocks         (default: 1.0)
+    render_scale_y  float   Renderer Y scale for geo blocks         (default: 1.0)
+    render_scale_z  float   Renderer Z scale for geo blocks         (default: 1.0)
+    render_offset_x float   Renderer X offset for geo blocks        (default: 0.0)
+    render_offset_y float   Renderer Y offset for geo blocks        (default: 0.0)
+    render_offset_z float   Renderer Z offset for geo blocks        (default: 0.0)
+    render_tint_r   float   Renderer tint red channel 0-1           (default: 1.0)
+    render_tint_g   float   Renderer tint green channel 0-1         (default: 1.0)
+    render_tint_b   float   Renderer tint blue channel 0-1          (default: 1.0)
+    render_tint_a   float   Renderer tint alpha channel 0-1         (default: 1.0)
     geo_model       str     Optional GeckoLib geo model path        (default: "")
     geo_texture     str     Optional GeckoLib texture path          (default: "")
     geo_animations  str     Optional GeckoLib animation path        (default: "")
@@ -71,6 +82,17 @@ class Block(metaclass=BlockMeta):
     variable_rotation: bool = False
     rotation_mode: str = "wall"
     model_collision: bool = False
+    render_layer: str = "solid"
+    render_scale_x: float = 1.0
+    render_scale_y: float = 1.0
+    render_scale_z: float = 1.0
+    render_offset_x: float = 0.0
+    render_offset_y: float = 0.0
+    render_offset_z: float = 0.0
+    render_tint_r: float = 1.0
+    render_tint_g: float = 1.0
+    render_tint_b: float = 1.0
+    render_tint_a: float = 1.0
     geo_model: str = ""
     geo_texture: str = ""
     geo_animations: str = ""

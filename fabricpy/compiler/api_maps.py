@@ -182,6 +182,22 @@ FABRIC_API_MAP: dict[str, str] = {
         'entity.setFireTicks((int)({0} * 20))',
     "ctx.entity.damage":
         'entity.damage(world.getDamageSources().generic(), {0})',
+    "ctx.entity.get_animation":
+        'entity.getAnimationName()',
+    "ctx.entity.play_animation":
+        'entity.setAnimationState({0}, true)',
+    "ctx.entity.play_animation_once":
+        'entity.setAnimationState({0}, false)',
+    "ctx.entity.stop_animation":
+        'entity.clearAnimationName()',
+    "ctx.entity.get_texture":
+        'entity.getTextureOverride()',
+    "ctx.entity.texture_change":
+        'entity.setTextureOverride({0})',
+    "ctx.entity.get_model":
+        'entity.getModelOverride()',
+    "ctx.entity.model_change":
+        'entity.setModelOverride({0})',
     "ctx.block_entity":
         'blockEntity',
     "ctx.block_entity.mark_dirty":
@@ -435,6 +451,22 @@ FORGE_API_MAP: dict[str, str] = {
         'entity.setRemainingFireTicks((int)({0} * 20))',
     "ctx.entity.damage":
         'entity.hurt(level.damageSources().generic(), {0})',
+    "ctx.entity.get_animation":
+        'entity.getAnimationName()',
+    "ctx.entity.play_animation":
+        'entity.setAnimationState({0}, true)',
+    "ctx.entity.play_animation_once":
+        'entity.setAnimationState({0}, false)',
+    "ctx.entity.stop_animation":
+        'entity.clearAnimationName()',
+    "ctx.entity.get_texture":
+        'entity.getTextureOverride()',
+    "ctx.entity.texture_change":
+        'entity.setTextureOverride({0})',
+    "ctx.entity.get_model":
+        'entity.getModelOverride()',
+    "ctx.entity.model_change":
+        'entity.setModelOverride({0})',
     "ctx.block_entity":
         'blockEntity',
     "ctx.block_entity.mark_dirty":

@@ -29,6 +29,10 @@ If you are working on advanced systems, also read:
 - [blocks.md](./blocks.md): block properties, hooks, rotation, emissives, block data, animated blocks
 - [items.md](./items.md): items, textures, models, emissive layers, right-click hooks, stack appearance data
 - [entities.md](./entities.md): normal entities and block entities
+- [networking.md](./networking.md): client/server packet handlers and send helpers
+- [screens.md](./screens.md): simple client screens, labels, buttons, and open handlers
+- [runtime-helpers.md](./runtime-helpers.md): math helpers, raycasts, and particles
+- [render-hooks.md](./render-hooks.md): render-layer control and generated geo renderers
 - [recipes.md](./recipes.md): shaped, shapeless, and raw recipe JSON
 - [advancements.md](./advancements.md): advancement generation
 - [creative-tabs.md](./creative-tabs.md): tab creation and tab item lists
@@ -44,6 +48,7 @@ If you are working on advanced systems, also read:
 ## Advanced / Compiler Reference
 
 - [animations.md](./animations.md): GeckoLib-backed animated blocks
+- [render-hooks.md](./render-hooks.md): generated renderers and render-layer behavior
 - [dependencies.md](./dependencies.md): dependency declarations, generated metadata, jar scanning, stub generation
 - [interop.md](./interop.md): current dependency interop architecture and limits
 - [roadmap.md](./roadmap.md): where the compiler is heading

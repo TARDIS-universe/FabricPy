@@ -1,8 +1,8 @@
 """
 Entity base class. Subclass this to create a custom non-block entity.
 
-This first-pass API focuses on registration, ticking, and basic size/category
-metadata. Custom rendering is not yet exposed as a Python-side API.
+This API now covers registration, ticking, basic size/category metadata,
+and an optional GeckoLib-backed renderer/animation path.
 """
 
 from fabricpy.decorators import on_tick
@@ -36,6 +36,22 @@ class Entity(metaclass=EntityMeta):
     attack_damage: float = 2.0
     follow_range: float = 16.0
     knockback_resistance: float = 0.0
+    render_layer: str = "solid"
+    shadow_radius: float = 0.5
+    render_scale_x: float = 1.0
+    render_scale_y: float = 1.0
+    render_scale_z: float = 1.0
+    render_offset_x: float = 0.0
+    render_offset_y: float = 0.0
+    render_offset_z: float = 0.0
+    render_tint_r: float = 1.0
+    render_tint_g: float = 1.0
+    render_tint_b: float = 1.0
+    render_tint_a: float = 1.0
+    geo_model: str = ""
+    geo_texture: str = ""
+    geo_animations: str = ""
+    default_animation: str = ""
 
     _hooks: dict = {}
 

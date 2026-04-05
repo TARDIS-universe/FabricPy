@@ -14,6 +14,10 @@ Docs:
 - `docs/blocks.md`
 - `docs/items.md`
 - `docs/entities.md`
+- `docs/networking.md`
+- `docs/screens.md`
+- `docs/runtime-helpers.md`
+- `docs/render-hooks.md`
 - `docs/recipes.md`
 - `docs/advancements.md`
 - `docs/creative-tabs.md`
@@ -57,6 +61,10 @@ Content support now includes:
 - block entities through `has_block_entity=True` and `@mc.on_tick`
 - persistent block data through `uses_block_data=True`
 - normal entities through `mc.Entity`
+- client/server packets through `mod.packet(...)`
+- client screens through `mod.screen(...)`
+- math helpers, raycasts, and particles through the runtime helper surface
+- generated geo entity renderers and explicit render-layer control
 - partial dependency jar scanning and generated Python stub output after successful builds
 
 The Python ctx surface now also includes:

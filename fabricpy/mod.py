@@ -114,6 +114,90 @@ class Keybind:
         return func
 
 
+class Packet:
+    def __init__(self, mod, packet_id: str):
+        if not packet_id:
+            raise ValueError("packet_id is required")
+        self.mod = mod
+        self.packet_id = packet_id.replace("\\", "/").strip("/")
+        self.server_func = None
+        self.server_source = ""
+        self.client_func = None
+        self.client_source = ""
+
+    def on_server(self, func):
+        self.server_func = func
+        self.server_source = inspect.getsource(func)
+        return func
+
+    def on_client(self, func):
+        self.client_func = func
+        self.client_source = inspect.getsource(func)
+        return func
+
+
+class ScreenButton:
+    def __init__(self, screen, button_id: str, text: str, x: int, y: int, width: int = 100, height: int = 20):
+        if not button_id:
+            raise ValueError("button_id is required")
+        self.screen = screen
+        self.button_id = button_id.replace("\\", "/").strip("/")
+        self.text = text
+        self.x = int(x)
+        self.y = int(y)
+        self.width = int(width)
+        self.height = int(height)
+        self.func = None
+        self.source = ""
+
+    def on_click(self, func):
+        self.func = func
+        self.source = inspect.getsource(func)
+        return func
+
+
+class _ScreenButtons:
+    def __init__(self, screen):
+        self._screen = screen
+
+    def add(self, button_id: str, text: str, x: int, y: int, width: int = 100, height: int = 20):
+        button = ScreenButton(self._screen, button_id=button_id, text=text, x=x, y=y, width=width, height=height)
+        self._screen.buttons.append(button)
+        return button
+
+
+class ScreenDefinition:
+    def __init__(self, mod, screen_id: str, title: str, width: int = 248, height: int = 166):
+        if not screen_id:
+            raise ValueError("screen_id is required")
+        if not title:
+            raise ValueError("title is required")
+        self.mod = mod
+        self.screen_id = screen_id.replace("\\", "/").strip("/")
+        self.title = title
+        self.width = int(width)
+        self.height = int(height)
+        self.buttons: list[ScreenButton] = []
+        self.labels: list[dict] = []
+        self.open_func = None
+        self.open_source = ""
+        self.button = _ScreenButtons(self)
+
+    def label(self, text: str, x: int, y: int, color: int = 0xFFFFFF):
+        self.labels.append({
+            "text": text,
+            "x": int(x),
+            "y": int(y),
+            "color": int(color),
+        })
+        return self.labels[-1]
+
+    def on_open(self, func):
+        self.open_func = func
+        self.open_source = inspect.getsource(func)
+        return func
+
+
 class Dependency:
     def __init__(
         self,
@@ -196,6 +280,8 @@ class Mod:
         self._sounds: list = []
         self._creative_tabs: list = []
         self._keybinds: list = []
+        self._packets: list = []
+        self._screens: list = []
         self._dependencies: list = []
         self._dimension_types: list = []
         self._dimensions: list = []
@@ -440,6 +526,24 @@ class Mod:
         return bind
 
     # ------------------------------------------------------------------ #
+    # Packet system
+    # ------------------------------------------------------------------ #
+
+    def packet(self, packet_id: str):
+        packet = Packet(self, packet_id=packet_id)
+        self._packets.append(packet)
+        return packet
+
+    # ------------------------------------------------------------------ #
+    # Screen system
+    # ------------------------------------------------------------------ #
+
+    def screen(self, screen_id: str, title: str, width: int = 248, height: int = 166):
+        screen = ScreenDefinition(self, screen_id=screen_id, title=title, width=width, height=height)
+        self._screens.append(screen)
+        return screen
+
+    # ------------------------------------------------------------------ #
     # Dependency system
     # ------------------------------------------------------------------ #
 
@@ -642,6 +746,7 @@ class Mod:
             f"blocks={len(self._blocks)} items={len(self._items)} entities={len(self._entities)} "
             f"events={len(self._events)} commands={len(self._commands)} "
             f"recipes={len(self._recipes)} advancements={len(self._advancements)} sounds={len(self._sounds)} creative_tabs={len(self._creative_tabs)} keybinds={len(self._keybinds)} "
+            f"packets={len(self._packets)} screens={len(self._screens)} "
             f"dependencies={len(self._dependencies)} "
             f"dimension_types={len(self._dimension_types)} dimensions={len(self._dimensions)} "
             f"structures={len(self._structures)}>"

@@ -273,7 +273,9 @@ def _blocks_with_block_entities(mod: "Mod") -> list:
 def _blocks_requiring_cutout(mod: "Mod") -> list:
     return [
         block for block in mod._blocks
-        if (not block.opaque) or bool(getattr(block, "emissive_texture", ""))
+        if _render_layer_value(getattr(block, "render_layer", "")) != "solid"
+        or (not block.opaque)
+        or bool(getattr(block, "emissive_texture", ""))
     ]
 
 
@@ -281,8 +283,28 @@ def _blocks_with_geo_animation(mod: "Mod") -> list:
     return [block for block in mod._blocks if bool(getattr(block, "geo_model", ""))]
 
 
+def _entities_with_geo_animation(mod: "Mod") -> list:
+    return [entity for entity in mod._entities if bool(getattr(entity, "geo_model", ""))]
+
+
 def _uses_geckolib(mod: "Mod") -> bool:
-    return bool(_blocks_with_geo_animation(mod))
+    return bool(_blocks_with_geo_animation(mod) or _entities_with_geo_animation(mod))
+
+
+def _render_layer_value(value: str) -> str:
+    clean = (value or "solid").strip().lower()
+    return clean if clean in {"solid", "cutout", "cutout_mipped", "translucent"} else "solid"
+
+
+def _forge_render_type_expr(value: str) -> str:
+    layer = _render_layer_value(value)
+    if layer == "translucent":
+        return "RenderType.translucent()"
+    if layer == "cutout_mipped":
+        return "RenderType.cutoutMipped()"
+    if layer == "cutout":
+        return "RenderType.cutout()"
+    return "RenderType.solid()"
 
 
 def _resource_location_parts(mod_id: str, ref: str, prefix: str, default_id: str, suffix: str) -> tuple[str, str]:
@@ -310,6 +332,48 @@ def _geo_texture_parts(mod_id: str, block) -> tuple[str, str]:
 
 def _geo_animation_parts(mod_id: str, block) -> tuple[str, str]:
     return _resource_location_parts(mod_id, getattr(block, "geo_animations", ""), "animations", block.block_id, ".animation.json")
+
+
+def _geo_entity_model_parts(mod_id: str, entity) -> tuple[str, str]:
+    return _resource_location_parts(mod_id, getattr(entity, "geo_model", ""), "geo", entity.entity_id, ".geo.json")
+
+
+def _geo_entity_texture_parts(mod_id: str, entity) -> tuple[str, str]:
+    return _resource_location_parts(mod_id, getattr(entity, "geo_texture", ""), "textures/entity", entity.entity_id, ".png")
+
+
+def _geo_entity_animation_parts(mod_id: str, entity) -> tuple[str, str]:
+    return _resource_location_parts(mod_id, getattr(entity, "geo_animations", ""), "animations", entity.entity_id, ".animation.json")
+
+
+def _forge_api_map_for_project(pkg: str) -> dict[str, str]:
+    api_map = dict(FORGE_API_MAP)
+    runtime = f"{pkg}.util.FabricPyRuntime"
+    network = f"{pkg}.network.FabricPyNetwork"
+    screens = f"{pkg}.client.ModScreens"
+    api_map.update({
+        "ctx.math.vec3": "new net.minecraft.world.phys.Vec3({0}, {1}, {2})",
+        "ctx.math.block_pos": "new BlockPos((int)({0}), (int)({1}), (int)({2}))",
+        "ctx.math.clamp": f"{runtime}.clamp({{0}}, {{1}}, {{2}})",
+        "ctx.math.lerp": f"{runtime}.lerp({{0}}, {{1}}, {{2}})",
+        "ctx.math.distance3": f"{runtime}.distance3({{0}}, {{1}}, {{2}}, {{3}}, {{4}}, {{5}})",
+        "ctx.math.length3": f"{runtime}.length3({{0}}, {{1}}, {{2}})",
+        "ctx.math.normalize3": f"{runtime}.normalize3({{0}}, {{1}}, {{2}})",
+        "ctx.math.add3": f"{runtime}.add3({{0}}, {{1}}, {{2}}, {{3}}, {{4}}, {{5}})",
+        "ctx.world.spawn_particle": f"{runtime}.spawnParticle(level, {{0}}, {{1}}, {{2}}, {{3}}, {{4}}, {{5}}, {{6}}, {{7}}, {{8}})",
+        "ctx.world.spawn_particle_self": f"{runtime}.spawnParticle(level, {{0}}, pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5, {{1}}, {{2}}, {{3}}, {{4}}, {{5}})",
+        "ctx.world.raycast_block": f"{runtime}.raycastBlock(level, {{0}}, {{1}})",
+        "ctx.world.raycast_block_id": f"{runtime}.raycastBlockId(level, {{0}}, {{1}})",
+        "ctx.world.raycast_block_pos_x": f"{runtime}.raycastBlockPosX(level, {{0}}, {{1}})",
+        "ctx.world.raycast_block_pos_y": f"{runtime}.raycastBlockPosY(level, {{0}}, {{1}})",
+        "ctx.world.raycast_block_pos_z": f"{runtime}.raycastBlockPosZ(level, {{0}}, {{1}})",
+        "ctx.client.open_screen": f"{screens}.open(client, {{0}})",
+        "ctx.client.close_screen": "client.setScreen(null)",
+        "ctx.net.send_to_server": f"{network}.sendToServer({{0}}, {{1}})",
+        "ctx.net.send_to_player": f"{network}.sendToPlayer((ServerPlayer)({{0}}), {{1}}, {{2}})",
+        "ctx.net.broadcast": f"{network}.broadcast(server, {{0}}, {{1}})",
+    })
+    return api_map
 
 
 def _keybind_code_expr(keybind) -> str:
@@ -418,11 +482,14 @@ def generate_forge_project(mod: "Mod", project_dir: Path):
         pass
 
     transpiler = JavaTranspiler(
-        FORGE_API_MAP,
+        _forge_api_map_for_project(pkg),
         interop_index_path=project_dir / ".fabricpy_meta" / "symbol_index.json",
     )
 
     _write_main_class(mod, java_root, pkg)
+    _write_runtime_helpers(mod, java_root, pkg)
+    _write_network(mod, java_root, pkg, transpiler)
+    _write_screens(mod, java_root, pkg, transpiler)
     _write_mod_blocks(mod, java_root, pkg)
     _write_mod_block_entities(mod, java_root, pkg)
     _write_mod_items(mod, java_root, pkg)
@@ -445,7 +512,8 @@ def _write_main_class(mod, java_root: Path, pkg: str):
     has_block_entities = bool(_blocks_with_block_entities(mod))
     has_creative_tabs = bool(mod._creative_tabs)
     has_keybinds = bool(mod._keybinds)
-    has_geo_blocks = _uses_geckolib(mod)
+    has_geo = _uses_geckolib(mod)
+    has_packets = bool(mod._packets)
     cutout_blocks = _blocks_requiring_cutout(mod)
 
     imports = []
@@ -459,16 +527,18 @@ def _write_main_class(mod, java_root: Path, pkg: str):
         imports.append(f"import {pkg}.blockentity.ModBlockEntities;")
     if has_keybinds:
         imports.append(f"import {pkg}.client.ModKeybinds;")
-    if has_geo_blocks:
-        imports.append(f"import {pkg}.client.ModGeoBlockRenderers;")
+    if has_geo:
+        imports.append(f"import {pkg}.client.ModGeoRenderers;")
+    if has_packets:
+        imports.append(f"import {pkg}.network.FabricPyNetwork;")
 
     client_setup_lines = [
-        *(f"            ItemBlockRenderTypes.setRenderLayer(ModBlocks.{block.block_id.upper()}.get(), RenderType.cutout());" for block in cutout_blocks),
-        *(["            ModGeoBlockRenderers.registerClient();"] if has_geo_blocks else []),
+        *(f"            ItemBlockRenderTypes.setRenderLayer(ModBlocks.{block.block_id.upper()}.get(), {_forge_render_type_expr(getattr(block, 'render_layer', 'cutout' if (not block.opaque or getattr(block, 'emissive_texture', '')) else 'solid'))});" for block in cutout_blocks),
+        *(["            ModGeoRenderers.registerClient();"] if has_geo else []),
         *(["            // Keybinds register through ModKeybinds on the client bus."] if has_keybinds else []),
     ]
     client_setup_code = ""
-    if cutout_blocks or has_keybinds or has_geo_blocks:
+    if cutout_blocks or has_keybinds or has_geo:
         client_setup_code = (
             "public void onClientSetup(FMLClientSetupEvent event) {\n"
             "        event.enqueueWork(() -> {\n"
@@ -507,12 +577,13 @@ public class {class_name} {{
         {"ModBlockEntities.BLOCK_ENTITIES.register(bus);" if has_block_entities else ""}
         {"ModCreativeTabs.TABS.register(bus);" if has_creative_tabs else ""}
         {"ModKeybinds.register(bus);" if has_keybinds else ""}
+        {"FabricPyNetwork.register();" if has_packets else ""}
         {"ModEntities.ENTITIES.register(bus);" if mod._entities else ""}
         {"bus.addListener(ModEvents::onCommonSetup);" if mod._events else "// No events"}
         {"bus.addListener(ModBlocks::addCreative);" if mod._blocks else ""}
         {"bus.addListener(ModItems::addCreative);" if mod._items else ""}
         {"bus.addListener(ModEntities::registerAttributes);" if mod._entities else ""}
-        {"bus.addListener(this::onClientSetup);" if (cutout_blocks or has_keybinds or has_geo_blocks) else ""}
+        {"bus.addListener(this::onClientSetup);" if (cutout_blocks or has_keybinds or has_geo) else ""}
 
         // Register command events on Forge's main bus
         {"net.minecraftforge.common.MinecraftForge.EVENT_BUS.register(ModCommands.class);" if mod._commands else "// No commands"}
@@ -523,6 +594,328 @@ public class {class_name} {{
 }}
 """
     _write_text(java_root / f"{class_name}.java", src)
+
+
+def _write_runtime_helpers(mod, java_root: Path, pkg: str):
+    util_dir = java_root / "util"
+    util_dir.mkdir(exist_ok=True)
+    src = f"""\
+package {pkg}.util;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.particles.SimpleParticleType;
+import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.Vec3;
+import net.minecraftforge.registries.ForgeRegistries;
+
+public class FabricPyRuntime {{
+    public static double clamp(double value, double min, double max) {{
+        return Math.max(min, Math.min(max, value));
+    }}
+
+    public static double lerp(double start, double end, double delta) {{
+        return start + ((end - start) * delta);
+    }}
+
+    public static double distance3(double x1, double y1, double z1, double x2, double y2, double z2) {{
+        return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2) + Math.pow(z2 - z1, 2));
+    }}
+
+    public static double length3(double x, double y, double z) {{
+        return Math.sqrt((x * x) + (y * y) + (z * z));
+    }}
+
+    public static Vec3 normalize3(double x, double y, double z) {{
+        double len = length3(x, y, z);
+        if (len <= 0.000001d) {{
+            return new Vec3(0, 0, 0);
+        }}
+        return new Vec3(x / len, y / len, z / len);
+    }}
+
+    public static Vec3 add3(double x1, double y1, double z1, double x2, double y2, double z2) {{
+        return new Vec3(x1 + x2, y1 + y2, z1 + z2);
+    }}
+
+    public static BlockHitResult raycastBlock(Level level, Vec3 start, Vec3 end) {{
+        return level.clip(new ClipContext(start, end, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, null));
+    }}
+
+    public static String raycastBlockId(Level level, Vec3 start, Vec3 end) {{
+        BlockHitResult hit = raycastBlock(level, start, end);
+        if (hit.getType() != HitResult.Type.BLOCK) {{
+            return "";
+        }}
+        BlockState state = level.getBlockState(hit.getBlockPos());
+        return ForgeRegistries.BLOCKS.getKey(state.getBlock()).toString();
+    }}
+
+    public static int raycastBlockPosX(Level level, Vec3 start, Vec3 end) {{
+        BlockHitResult hit = raycastBlock(level, start, end);
+        return hit.getType() == HitResult.Type.BLOCK ? hit.getBlockPos().getX() : 0;
+    }}
+
+    public static int raycastBlockPosY(Level level, Vec3 start, Vec3 end) {{
+        BlockHitResult hit = raycastBlock(level, start, end);
+        return hit.getType() == HitResult.Type.BLOCK ? hit.getBlockPos().getY() : 0;
+    }}
+
+    public static int raycastBlockPosZ(Level level, Vec3 start, Vec3 end) {{
+        BlockHitResult hit = raycastBlock(level, start, end);
+        return hit.getType() == HitResult.Type.BLOCK ? hit.getBlockPos().getZ() : 0;
+    }}
+
+    public static void spawnParticle(Level level, String particleId, double x, double y, double z, double dx, double dy, double dz, double speed, int count) {{
+        var particleType = ForgeRegistries.PARTICLE_TYPES.getValue(new net.minecraft.resources.ResourceLocation(particleId));
+        if (!(particleType instanceof SimpleParticleType simple)) {{
+            return;
+        }}
+        if (level instanceof net.minecraft.server.level.ServerLevel serverLevel) {{
+            serverLevel.sendParticles(simple, x, y, z, count, dx, dy, dz, speed);
+            return;
+        }}
+        for (int i = 0; i < Math.max(1, count); i++) {{
+            level.addParticle(simple, x, y, z, dx, dy, dz);
+        }}
+    }}
+}}
+"""
+    _write_text(util_dir / "FabricPyRuntime.java", src)
+
+
+def _write_network(mod, java_root: Path, pkg: str, transpiler: JavaTranspiler):
+    if not mod._packets:
+        return
+    network_dir = java_root / "network"
+    network_dir.mkdir(exist_ok=True)
+
+    server_cases = []
+    client_cases = []
+    for packet in mod._packets:
+        if packet.server_source:
+            body = transpiler.transpile_method(packet.server_source)
+            server_cases.append(f"""\
+            case "{packet.packet_id}" -> {{
+                var player = context.getSender();
+                if (player == null) {{
+                    return;
+                }}
+                var server = player.getServer();
+                var level = player.level();
+                BlockPos soundPos = player.blockPosition();
+{body}
+            }}""")
+        if packet.client_source:
+            body = transpiler.transpile_method(packet.client_source)
+            client_cases.append(f"""\
+            case "{packet.packet_id}" -> {{
+                var client = net.minecraft.client.Minecraft.getInstance();
+                var player = client.player;
+                var level = client.level;
+                var server = client.getSingleplayerServer();
+                BlockPos soundPos = player != null ? player.blockPosition() : BlockPos.ZERO;
+{body}
+            }}""")
+
+    src = f"""\
+package {pkg}.network;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraftforge.network.NetworkDirection;
+import net.minecraftforge.network.NetworkRegistry;
+import net.minecraftforge.network.PacketDistributor;
+import net.minecraftforge.network.simple.SimpleChannel;
+
+import java.util.function.Supplier;
+
+public class FabricPyNetwork {{
+    private static final String PROTOCOL = "1";
+    public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
+        new ResourceLocation("{mod.mod_id}", "fabricpy_network"),
+        () -> PROTOCOL,
+        PROTOCOL::equals,
+        PROTOCOL::equals
+    );
+
+    public static void register() {{
+        CHANNEL.registerMessage(0, FabricPyC2SPacket.class, FabricPyC2SPacket::encode, FabricPyC2SPacket::decode, FabricPyNetwork::handleC2S, java.util.Optional.of(NetworkDirection.PLAY_TO_SERVER));
+        CHANNEL.registerMessage(1, FabricPyS2CPacket.class, FabricPyS2CPacket::encode, FabricPyS2CPacket::decode, FabricPyNetwork::handleS2C, java.util.Optional.of(NetworkDirection.PLAY_TO_CLIENT));
+    }}
+
+    public static void sendToServer(String packetId, String message) {{
+        CHANNEL.sendToServer(new FabricPyC2SPacket(packetId, message));
+    }}
+
+    public static void sendToPlayer(ServerPlayer player, String packetId, String message) {{
+        if (player == null) {{
+            return;
+        }}
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new FabricPyS2CPacket(packetId, message));
+    }}
+
+    public static void broadcast(net.minecraft.server.MinecraftServer server, String packetId, String message) {{
+        if (server == null) {{
+            return;
+        }}
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {{
+            sendToPlayer(player, packetId, message);
+        }}
+    }}
+
+    private static void handleC2S(FabricPyC2SPacket packet, Supplier<net.minecraftforge.network.NetworkEvent.Context> supplier) {{
+        var context = supplier.get();
+        context.enqueueWork(() -> {{
+            String message = packet.message();
+            switch (packet.packetId()) {{
+{chr(10).join(server_cases) if server_cases else '            default -> { }'}
+                default -> {{
+                }}
+            }}
+        }});
+        context.setPacketHandled(true);
+    }}
+
+    private static void handleS2C(FabricPyS2CPacket packet, Supplier<net.minecraftforge.network.NetworkEvent.Context> supplier) {{
+        var context = supplier.get();
+        context.enqueueWork(() -> {{
+            String message = packet.message();
+            switch (packet.packetId()) {{
+{chr(10).join(client_cases) if client_cases else '            default -> { }'}
+                default -> {{
+                }}
+            }}
+        }});
+        context.setPacketHandled(true);
+    }}
+
+    public record FabricPyC2SPacket(String packetId, String message) {{
+        public static void encode(FabricPyC2SPacket packet, FriendlyByteBuf buf) {{
+            buf.writeUtf(packet.packetId == null ? "" : packet.packetId);
+            buf.writeUtf(packet.message == null ? "" : packet.message);
+        }}
+
+        public static FabricPyC2SPacket decode(FriendlyByteBuf buf) {{
+            return new FabricPyC2SPacket(buf.readUtf(), buf.readUtf());
+        }}
+    }}
+
+    public record FabricPyS2CPacket(String packetId, String message) {{
+        public static void encode(FabricPyS2CPacket packet, FriendlyByteBuf buf) {{
+            buf.writeUtf(packet.packetId == null ? "" : packet.packetId);
+            buf.writeUtf(packet.message == null ? "" : packet.message);
+        }}
+
+        public static FabricPyS2CPacket decode(FriendlyByteBuf buf) {{
+            return new FabricPyS2CPacket(buf.readUtf(), buf.readUtf());
+        }}
+    }}
+}}
+"""
+    _write_text(network_dir / "FabricPyNetwork.java", src)
+
+
+def _write_screens(mod, java_root: Path, pkg: str, transpiler: JavaTranspiler):
+    if not mod._screens:
+        return
+    client_dir = java_root / "client"
+    client_dir.mkdir(exist_ok=True)
+    screen_dir = client_dir / "screen"
+    screen_dir.mkdir(exist_ok=True)
+
+    open_lines = []
+    for screen in mod._screens:
+        cn = f"{to_pascal(screen.screen_id.replace('/', '_'))}Screen"
+        open_body = transpiler.transpile_method(screen.open_source) if screen.open_source else "        // No on_open handler"
+        button_lines = []
+        for button in screen.buttons:
+            body = transpiler.transpile_method(button.source) if button.source else "            // No handler"
+            button_lines.append(f"""\
+        this.addRenderableWidget(net.minecraft.client.gui.components.Button.builder(net.minecraft.network.chat.Component.literal("{button.text}"), widget -> {{
+            var client = this.minecraft;
+            var screen = this;
+            var player = client != null ? client.player : null;
+            var level = client != null ? client.level : null;
+            var server = client != null ? client.getSingleplayerServer() : null;
+            var buttonObj = widget;
+            BlockPos soundPos = player != null ? player.blockPosition() : BlockPos.ZERO;
+{body}
+        }}).bounds({button.x}, {button.y}, {button.width}, {button.height}).build());""")
+        label_lines = [
+            f'        guiGraphics.drawString(this.font, net.minecraft.network.chat.Component.literal("{label["text"]}"), {label["x"]}, {label["y"]}, {label["color"]});'
+            for label in screen.labels
+        ]
+        src = f"""\
+package {pkg}.client.screen;
+
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
+
+public class {cn} extends Screen {{
+    public {cn}() {{
+        super(Component.literal("{screen.title}"));
+    }}
+
+    @Override
+    protected void init() {{
+        super.init();
+{f'''        {{
+            var client = this.minecraft;
+            var screen = this;
+            var player = client != null ? client.player : null;
+            var level = client != null ? client.level : null;
+            var server = client != null ? client.getSingleplayerServer() : null;
+            BlockPos soundPos = player != null ? player.blockPosition() : BlockPos.ZERO;
+{open_body}
+        }}''' if screen.open_source else '        // No on_open handler'}
+{chr(10).join(button_lines)}
+    }}
+
+    @Override
+    public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {{
+        this.renderBackground(guiGraphics);
+        super.render(guiGraphics, mouseX, mouseY, partialTick);
+        guiGraphics.drawCenteredString(this.font, this.title, this.width / 2, 12, 0xFFFFFF);
+{chr(10).join(label_lines) if label_lines else '        // No labels'}
+    }}
+
+    @Override
+    public boolean isPauseScreen() {{
+        return false;
+    }}
+}}
+"""
+        _write_text(screen_dir / f"{cn}.java", src)
+        open_lines.append(f'            case "{screen.screen_id}" -> client.setScreen(new {pkg}.client.screen.{cn}());')
+
+    src = f"""\
+package {pkg}.client;
+
+import net.minecraft.client.Minecraft;
+
+public class ModScreens {{
+    public static void open(Minecraft client, String screenId) {{
+        if (client == null || screenId == null) {{
+            return;
+        }}
+        switch (screenId) {{
+{chr(10).join(open_lines)}
+            default -> {{
+            }}
+        }}
+    }}
+}}
+"""
+    _write_text(client_dir / "ModScreens.java", src)
 
 
 def _write_mod_blocks(mod, java_root: Path, pkg: str):
@@ -788,7 +1181,8 @@ public class ModKeybinds {{
 
 def _write_geo_block_renderers(mod, java_root: Path, pkg: str):
     geo_blocks = _blocks_with_geo_animation(mod)
-    if not geo_blocks:
+    geo_entities = _entities_with_geo_animation(mod)
+    if not geo_blocks and not geo_entities:
         return
     client_dir = java_root / "client"
     client_dir.mkdir(exist_ok=True)
@@ -814,14 +1208,26 @@ import net.minecraft.resources.ResourceLocation;
 import software.bernie.geckolib.model.GeoModel;
 
 public class {model_cn} extends GeoModel<{cn}BlockEntity> {{
+    private ResourceLocation parseRef(String raw, String fallbackNamespace, String fallbackPath) {{
+        String value = raw == null ? "" : raw.trim();
+        if (value.isEmpty()) {{
+            return new ResourceLocation(fallbackNamespace, fallbackPath);
+        }}
+        int split = value.indexOf(':');
+        if (split >= 0) {{
+            return new ResourceLocation(value.substring(0, split), value.substring(split + 1));
+        }}
+        return new ResourceLocation("{mod.mod_id}", value);
+    }}
+
     @Override
     public ResourceLocation getModelResource({cn}BlockEntity animatable) {{
-        return new ResourceLocation("{model_ns}", "{model_path}");
+        return parseRef(animatable.getModelOverride(), "{model_ns}", "{model_path}");
     }}
 
     @Override
     public ResourceLocation getTextureResource({cn}BlockEntity animatable) {{
-        return new ResourceLocation("{tex_ns}", "{tex_path}");
+        return parseRef(animatable.getTextureOverride(), "{tex_ns}", "{tex_path}");
     }}
 
     @Override
@@ -837,11 +1243,35 @@ package {pkg}.client.renderer;
 
 import {pkg}.blockentity.{cn}BlockEntity;
 import {pkg}.client.model.{model_cn};
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.VertexConsumer;
+import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.RenderType;
+import net.minecraft.resources.ResourceLocation;
+import software.bernie.geckolib.cache.object.BakedGeoModel;
+import software.bernie.geckolib.core.object.Color;
 import software.bernie.geckolib.renderer.GeoBlockRenderer;
 
 public class {renderer_cn} extends GeoBlockRenderer<{cn}BlockEntity> {{
     public {renderer_cn}() {{
         super(new {model_cn}());
+    }}
+
+    @Override
+    public RenderType getRenderType({cn}BlockEntity animatable, ResourceLocation texture, MultiBufferSource bufferSource, float partialTick) {{
+        return {_forge_render_type_expr(getattr(block, "render_layer", "translucent" if not block.opaque else "solid"))};
+    }}
+
+    @Override
+    public void preRender(PoseStack poseStack, {cn}BlockEntity animatable, BakedGeoModel model, MultiBufferSource bufferSource, VertexConsumer buffer, boolean isReRender, float partialTick, int packedLight, int packedOverlay, float red, float green, float blue, float alpha) {{
+        poseStack.translate({getattr(block, "render_offset_x", 0.0)}d, {getattr(block, "render_offset_y", 0.0)}d, {getattr(block, "render_offset_z", 0.0)}d);
+        poseStack.scale({float(getattr(block, "render_scale_x", 1.0))}f, {float(getattr(block, "render_scale_y", 1.0))}f, {float(getattr(block, "render_scale_z", 1.0))}f);
+        super.preRender(poseStack, animatable, model, bufferSource, buffer, isReRender, partialTick, packedLight, packedOverlay, red, green, blue, alpha);
+    }}
+
+    @Override
+    public Color getRenderColor({cn}BlockEntity animatable, float partialTick, int packedLight) {{
+        return Color.ofRGBA({float(getattr(block, "render_tint_r", 1.0))}f, {float(getattr(block, "render_tint_g", 1.0))}f, {float(getattr(block, "render_tint_b", 1.0))}f, {float(getattr(block, "render_tint_a", 1.0))}f);
     }}
 }}
 """
@@ -850,16 +1280,106 @@ public class {renderer_cn} extends GeoBlockRenderer<{cn}BlockEntity> {{
             f"        net.minecraft.client.renderer.blockentity.BlockEntityRenderers.register({pkg}.blockentity.ModBlockEntities.{block.block_id.upper()}.get(), context -> new {pkg}.client.renderer.{renderer_cn}());"
         )
 
+    for entity in geo_entities:
+        cn = entity.get_class_name()
+        model_cn = f"{cn}GeoModel"
+        renderer_cn = f"{cn}GeoRenderer"
+        model_ns, model_path = _geo_entity_model_parts(mod.mod_id, entity)
+        tex_ns, tex_path = _geo_entity_texture_parts(mod.mod_id, entity)
+        anim_ns, anim_path = _geo_entity_animation_parts(mod.mod_id, entity)
+
+        model_src = f"""\
+package {pkg}.client.model;
+
+import {pkg}.entity.{cn};
+import net.minecraft.resources.ResourceLocation;
+import software.bernie.geckolib.model.GeoModel;
+
+public class {model_cn} extends GeoModel<{cn}> {{
+    private ResourceLocation parseRef(String raw, String fallbackNamespace, String fallbackPath) {{
+        String value = raw == null ? "" : raw.trim();
+        if (value.isEmpty()) {{
+            return new ResourceLocation(fallbackNamespace, fallbackPath);
+        }}
+        int split = value.indexOf(':');
+        if (split >= 0) {{
+            return new ResourceLocation(value.substring(0, split), value.substring(split + 1));
+        }}
+        return new ResourceLocation("{mod.mod_id}", value);
+    }}
+
+    @Override
+    public ResourceLocation getModelResource({cn} animatable) {{
+        return parseRef(animatable.getModelOverride(), "{model_ns}", "{model_path}");
+    }}
+
+    @Override
+    public ResourceLocation getTextureResource({cn} animatable) {{
+        return parseRef(animatable.getTextureOverride(), "{tex_ns}", "{tex_path}");
+    }}
+
+    @Override
+    public ResourceLocation getAnimationResource({cn} animatable) {{
+        return new ResourceLocation("{anim_ns}", "{anim_path}");
+    }}
+}}
+"""
+        _write_text(model_dir / f"{model_cn}.java", model_src)
+
+        renderer_src = f"""\
+package {pkg}.client.renderer;
+
+import {pkg}.client.model.{model_cn};
+import {pkg}.entity.{cn};
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.VertexConsumer;
+import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.entity.EntityRendererProvider;
+import net.minecraft.resources.ResourceLocation;
+import software.bernie.geckolib.cache.object.BakedGeoModel;
+import software.bernie.geckolib.core.object.Color;
+import software.bernie.geckolib.renderer.GeoEntityRenderer;
+
+public class {renderer_cn} extends GeoEntityRenderer<{cn}> {{
+    public {renderer_cn}(EntityRendererProvider.Context ctx) {{
+        super(ctx, new {model_cn}());
+        this.shadowRadius = {getattr(entity, "shadow_radius", 0.5)}f;
+    }}
+
+    @Override
+    public RenderType getRenderType({cn} animatable, ResourceLocation texture, MultiBufferSource bufferSource, float partialTick) {{
+        return {_forge_render_type_expr(getattr(entity, "render_layer", "solid"))};
+    }}
+
+    @Override
+    public void preRender(PoseStack poseStack, {cn} animatable, BakedGeoModel model, MultiBufferSource bufferSource, VertexConsumer buffer, boolean isReRender, float partialTick, int packedLight, int packedOverlay, float red, float green, float blue, float alpha) {{
+        poseStack.translate({getattr(entity, "render_offset_x", 0.0)}d, {getattr(entity, "render_offset_y", 0.0)}d, {getattr(entity, "render_offset_z", 0.0)}d);
+        poseStack.scale({float(getattr(entity, "render_scale_x", 1.0))}f, {float(getattr(entity, "render_scale_y", 1.0))}f, {float(getattr(entity, "render_scale_z", 1.0))}f);
+        super.preRender(poseStack, animatable, model, bufferSource, buffer, isReRender, partialTick, packedLight, packedOverlay, red, green, blue, alpha);
+    }}
+
+    @Override
+    public Color getRenderColor({cn} animatable, float partialTick, int packedLight) {{
+        return Color.ofRGBA({float(getattr(entity, "render_tint_r", 1.0))}f, {float(getattr(entity, "render_tint_g", 1.0))}f, {float(getattr(entity, "render_tint_b", 1.0))}f, {float(getattr(entity, "render_tint_a", 1.0))}f);
+    }}
+}}
+"""
+        _write_text(renderer_dir / f"{renderer_cn}.java", renderer_src)
+        registration_lines.append(
+            f"        net.minecraft.client.renderer.entity.EntityRenderers.register({pkg}.entity.ModEntities.{entity.entity_id.upper()}.get(), context -> new {pkg}.client.renderer.{renderer_cn}(context));"
+        )
+
     register_src = f"""\
 package {pkg}.client;
 
-public class ModGeoBlockRenderers {{
+public class ModGeoRenderers {{
     public static void registerClient() {{
 {chr(10).join(registration_lines)}
     }}
 }}
 """
-    _write_text(client_dir / "ModGeoBlockRenderers.java", register_src)
+    _write_text(client_dir / "ModGeoRenderers.java", register_src)
 
 
 def _write_mod_entities(mod, java_root: Path, pkg: str):
@@ -1189,6 +1709,22 @@ import net.minecraft.core.HolderLookup;"""
         return fabricpyData.getString(key);
     }
 
+    public String getTextureOverride() {
+        return getStringData("__fabricpy_texture");
+    }
+
+    public void setTextureOverride(String value) {
+        setStringData("__fabricpy_texture", value);
+    }
+
+    public String getModelOverride() {
+        return getStringData("__fabricpy_model");
+    }
+
+    public void setModelOverride(String value) {
+        setStringData("__fabricpy_model", value);
+    }
+
     public void setStringData(String key, String value) {
         fabricpyData.putString(key, value);
         setChanged();
@@ -1270,6 +1806,22 @@ import net.minecraft.core.HolderLookup;"""
 
     public String getStringData(String key) {
         return fabricpyData.getString(key);
+    }
+
+    public String getTextureOverride() {
+        return getStringData("__fabricpy_texture");
+    }
+
+    public void setTextureOverride(String value) {
+        setStringData("__fabricpy_texture", value);
+    }
+
+    public String getModelOverride() {
+        return getStringData("__fabricpy_model");
+    }
+
+    public void setModelOverride(String value) {
+        setStringData("__fabricpy_model", value);
     }
 
     public void setStringData(String key, String value) {
@@ -1502,6 +2054,7 @@ def _write_single_entity(entity, entity_dir: Path, pkg: str, transpiler: JavaTra
     cn = entity.get_class_name()
     hooks = entity.get_hooks()
     method_blocks = []
+    is_geo = bool(getattr(entity, "geo_model", ""))
     if "on_tick" in hooks:
         body = transpiler.transpile_method(
             __import__("inspect").getsource(hooks["on_tick"])
@@ -1517,6 +2070,91 @@ def _write_single_entity(entity, entity_dir: Path, pkg: str, transpiler: JavaTra
 {body}
     }}""")
 
+    geo_imports = ""
+    geo_fields = ""
+    geo_methods = ""
+    if is_geo:
+        default_animation = getattr(entity, "default_animation", "")
+        geo_imports = """import net.minecraft.network.syncher.EntityDataAccessor;
+import net.minecraft.network.syncher.EntityDataSerializers;
+import net.minecraft.network.syncher.SynchedEntityData;
+import software.bernie.geckolib.animatable.GeoEntity;
+import software.bernie.geckolib.core.animatable.instance.AnimatableInstanceCache;
+import software.bernie.geckolib.core.animation.AnimatableManager;
+import software.bernie.geckolib.core.animation.AnimationController;
+import software.bernie.geckolib.core.animation.RawAnimation;
+import software.bernie.geckolib.util.GeckoLibUtil;"""
+        geo_fields = f"""
+    private static final EntityDataAccessor<String> FABRICPY_ANIMATION = SynchedEntityData.defineId({cn}.class, EntityDataSerializers.STRING);
+    private static final EntityDataAccessor<Boolean> FABRICPY_ANIMATION_LOOP = SynchedEntityData.defineId({cn}.class, EntityDataSerializers.BOOLEAN);
+    private static final EntityDataAccessor<String> FABRICPY_TEXTURE = SynchedEntityData.defineId({cn}.class, EntityDataSerializers.STRING);
+    private static final EntityDataAccessor<String> FABRICPY_MODEL = SynchedEntityData.defineId({cn}.class, EntityDataSerializers.STRING);
+    private final AnimatableInstanceCache geoCache = GeckoLibUtil.createInstanceCache(this);
+"""
+        geo_methods = f"""
+    @Override
+    protected void defineSynchedData() {{
+        super.defineSynchedData();
+        this.entityData.define(FABRICPY_ANIMATION, "");
+        this.entityData.define(FABRICPY_ANIMATION_LOOP, true);
+        this.entityData.define(FABRICPY_TEXTURE, "");
+        this.entityData.define(FABRICPY_MODEL, "");
+    }}
+
+    public String getAnimationName() {{
+        return this.entityData.get(FABRICPY_ANIMATION);
+    }}
+
+    public void setAnimationState(String animationName, boolean loop) {{
+        this.entityData.set(FABRICPY_ANIMATION, animationName == null ? "" : animationName);
+        this.entityData.set(FABRICPY_ANIMATION_LOOP, loop);
+    }}
+
+    public void clearAnimationName() {{
+        this.entityData.set(FABRICPY_ANIMATION, "");
+        this.entityData.set(FABRICPY_ANIMATION_LOOP, true);
+    }}
+
+    public String getTextureOverride() {{
+        return this.entityData.get(FABRICPY_TEXTURE);
+    }}
+
+    public void setTextureOverride(String value) {{
+        this.entityData.set(FABRICPY_TEXTURE, value == null ? "" : value);
+    }}
+
+    public String getModelOverride() {{
+        return this.entityData.get(FABRICPY_MODEL);
+    }}
+
+    public void setModelOverride(String value) {{
+        this.entityData.set(FABRICPY_MODEL, value == null ? "" : value);
+    }}
+
+    @Override
+    public void registerControllers(AnimatableManager.ControllerRegistrar controllers) {{
+        controllers.add(new AnimationController<>(this, "controller", 0, state -> {{
+            String animationName = getAnimationName();
+            if ((animationName == null || animationName.isEmpty()) && !"{default_animation}".isEmpty()) {{
+                animationName = "{default_animation}";
+            }}
+            if (animationName == null || animationName.isEmpty()) {{
+                return state.setAndContinue(RawAnimation.begin());
+            }}
+            boolean loop = this.entityData.get(FABRICPY_ANIMATION_LOOP);
+            RawAnimation animation = loop
+                ? RawAnimation.begin().thenLoop(animationName)
+                : RawAnimation.begin().thenPlay(animationName);
+            return state.setAndContinue(animation);
+        }}));
+    }}
+
+    @Override
+    public AnimatableInstanceCache getAnimatableInstanceCache() {{
+        return geoCache;
+    }}
+"""
+
     src = f"""\
 package {pkg}.entity;
 
@@ -1527,11 +2165,13 @@ import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.level.Level;
+{geo_imports}
 
 /**
  * {entity.get_display_name()} - generated by fabricpy
  */
-public class {cn} extends PathfinderMob {{
+public class {cn} extends PathfinderMob{" implements GeoEntity" if is_geo else ""} {{
+{geo_fields}
 
     public {cn}(EntityType<? extends PathfinderMob> entityType, Level level) {{
         super(entityType, level);
@@ -1551,6 +2191,7 @@ public class {cn} extends PathfinderMob {{
         // No default AI goals generated by fabricpy yet.
     }}
 
+{geo_methods}
 {chr(10).join(method_blocks)}
 }}
 """

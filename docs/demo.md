@@ -14,6 +14,7 @@ Core content:
 
 - a normal block
 - a normal item
+- a geo animated entity
 - a creative tab
 - an advancement
 - a command
@@ -22,7 +23,9 @@ Core content:
 Advanced runtime:
 
 - a stateful animated block with `uses_block_data = True`
+- a translucent animated entity with generated renderer controls
 - generated block-entity ticking through `@mc.on_tick`
+- generated entity ticking through `@mc.on_tick`
 - event-driven logic with `player_use_item`
 - animation switching from Python
 
@@ -71,6 +74,22 @@ It demonstrates:
 - food settings
 - event usage through `player_use_item`
 
+### `TimeWisp`
+
+This is the advanced entity in the demo.
+
+It demonstrates:
+
+- `mc.Entity`
+- generated GeckoLib entity model/rendering
+- `geo_model`
+- `geo_texture`
+- `geo_animations`
+- `default_animation`
+- translucent rendering
+- renderer scale, offset, tint, and alpha controls
+- code-driven animation switching in `@mc.on_tick`
+
 ## Demo Assets
 
 The animated relay uses:
@@ -78,6 +97,12 @@ The animated relay uses:
 - `assets/demo/geo/machines/demo_relay.geo.json`
 - `assets/demo/animations/machines/demo_relay.animation.json`
 - `assets/demo/textures/block/block.png`
+
+The animated entity uses:
+
+- `assets/demo/geo/mobs/time_wisp.geo.json`
+- `assets/demo/animations/mobs/time_wisp.animation.json`
+- `assets/demo/textures/entity/mobs/time_wisp.png`
 
 That combination is intentionally simple. The point is to prove the path, not to ship a complicated art asset.
 
