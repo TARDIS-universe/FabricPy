@@ -355,6 +355,17 @@ def _fabric_render_layer_expr(value: str) -> str:
     return "RenderLayer.getSolid()"
 
 
+def _fabric_geo_render_layer_expr(value: str, texture_expr: str = "texture") -> str:
+    layer = _render_layer_value(value)
+    if layer == "translucent":
+        return f"RenderLayer.getEntityTranslucent({texture_expr})"
+    if layer == "cutout_mipped":
+        return f"RenderLayer.getEntityCutoutNoCull({texture_expr})"
+    if layer == "cutout":
+        return f"RenderLayer.getEntityCutoutNoCull({texture_expr})"
+    return f"RenderLayer.getEntitySolid({texture_expr})"
+
+
 def _resource_location_parts(mod_id: str, ref: str, prefix: str, default_id: str, suffix: str) -> tuple[str, str]:
     clean = (ref or "").strip()
     if ":" in clean:
@@ -389,6 +400,10 @@ def _geo_texture_parts(mod_id: str, block) -> tuple[str, str]:
 
 def _geo_animation_parts(mod_id: str, block) -> tuple[str, str]:
     return _resource_location_parts(mod_id, getattr(block, "geo_animations", ""), "animations", block.block_id, ".animation.json")
+
+
+def _geo_emissive_texture_parts(mod_id: str, block) -> tuple[str, str]:
+    return _resource_location_parts(mod_id, getattr(block, "emissive_texture", ""), "textures/block", f"{block.block_id}_emissive", ".png")
 
 
 def _geo_entity_model_parts(mod_id: str, entity) -> tuple[str, str]:
@@ -962,6 +977,7 @@ def _write_geo_block_renderers(mod: "Mod", java_root: Path, pkg: str):
         cn = block.get_class_name()
         model_cn = f"{cn}GeoModel"
         renderer_cn = f"{cn}GeoRenderer"
+        layer_cn = f"{cn}EmissiveLayer"
         model_ns, model_path = _geo_model_parts(mod.mod_id, block)
         tex_ns, tex_path = _geo_texture_parts(mod.mod_id, block)
         anim_ns, anim_path = _geo_animation_parts(mod.mod_id, block)
@@ -1003,6 +1019,55 @@ public class {model_cn} extends GeoModel<{cn}BlockEntity> {{
 """
         _write_text(model_dir / f"{model_cn}.java", model_src)
 
+        layer_registration = ""
+        if getattr(block, "emissive_texture", ""):
+            em_ns, em_path = _geo_emissive_texture_parts(mod.mod_id, block)
+            layer_src = f"""\
+package {pkg}.client.renderer;
+
+import {pkg}.blockentity.{cn}BlockEntity;
+import net.minecraft.client.render.RenderLayer;
+import net.minecraft.client.render.VertexConsumer;
+import net.minecraft.client.render.VertexConsumerProvider;
+import net.minecraft.client.render.LightmapTextureManager;
+import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.util.Identifier;
+import software.bernie.geckolib.cache.object.BakedGeoModel;
+import software.bernie.geckolib.renderer.layer.GeoRenderLayer;
+
+public class {layer_cn} extends GeoRenderLayer<{cn}BlockEntity> {{
+    private static final Identifier EMISSIVE_TEXTURE = {_id_ctor(mod, f'"{em_ns}"', f'"{em_path}"')};
+
+    public {layer_cn}({renderer_cn} renderer) {{
+        super(renderer);
+    }}
+
+    @Override
+    public void render(MatrixStack poseStack, {cn}BlockEntity animatable, BakedGeoModel bakedModel, RenderLayer renderType,
+                       VertexConsumerProvider bufferSource, VertexConsumer buffer, float partialTick, int packedLight, int packedOverlay) {{
+        poseStack.push();
+        poseStack.scale(1.001f, 1.001f, 1.001f);
+        VertexConsumer emissiveBuffer = bufferSource.getBuffer(RenderLayer.getEntityCutoutNoCull(EMISSIVE_TEXTURE));
+        getRenderer().reRender(
+            bakedModel,
+            poseStack,
+            bufferSource,
+            animatable,
+            RenderLayer.getEntityCutoutNoCull(EMISSIVE_TEXTURE),
+            emissiveBuffer,
+            partialTick,
+            LightmapTextureManager.MAX_LIGHT_COORDINATE,
+            packedOverlay,
+            1f, 1f, 1f, 1f
+        );
+        poseStack.pop();
+    }}
+}}
+"""
+            _write_text(renderer_dir / f"{layer_cn}.java", layer_src)
+            layer_registration = f"""
+        this.addRenderLayer(new {layer_cn}(this));"""
+
         renderer_src = f"""\
 package {pkg}.client.renderer;
 
@@ -1019,18 +1084,20 @@ import software.bernie.geckolib.renderer.GeoBlockRenderer;
 
 public class {renderer_cn} extends GeoBlockRenderer<{cn}BlockEntity> {{
     public {renderer_cn}() {{
-        super(new {model_cn}());
+        super(new {model_cn}());{layer_registration}
     }}
 
     @Override
     public RenderLayer getRenderType({cn}BlockEntity animatable, Identifier texture, VertexConsumerProvider bufferSource, float partialTick) {{
-        return {_fabric_render_layer_expr(getattr(block, "render_layer", "translucent" if not block.opaque else "solid"))};
+        return {_fabric_geo_render_layer_expr(getattr(block, "render_layer", "translucent" if not block.opaque else "solid"))};
     }}
 
     @Override
     public void preRender(MatrixStack poseStack, {cn}BlockEntity animatable, BakedGeoModel model, VertexConsumerProvider bufferSource, VertexConsumer buffer, boolean isReRender, float partialTick, int packedLight, int packedOverlay, float red, float green, float blue, float alpha) {{
-        poseStack.translate({getattr(block, "render_offset_x", 0.0)}d, {getattr(block, "render_offset_y", 0.0)}d, {getattr(block, "render_offset_z", 0.0)}d);
-        poseStack.scale({float(getattr(block, "render_scale_x", 1.0))}f, {float(getattr(block, "render_scale_y", 1.0))}f, {float(getattr(block, "render_scale_z", 1.0))}f);
+        if (!isReRender) {{
+            poseStack.translate({getattr(block, "render_offset_x", 0.0)}d, {getattr(block, "render_offset_y", 0.0)}d, {getattr(block, "render_offset_z", 0.0)}d);
+            poseStack.scale({float(getattr(block, "render_scale_x", 1.0))}f, {float(getattr(block, "render_scale_y", 1.0))}f, {float(getattr(block, "render_scale_z", 1.0))}f);
+        }}
         super.preRender(poseStack, animatable, model, bufferSource, buffer, isReRender, partialTick, packedLight, packedOverlay, red, green, blue, alpha);
     }}
 
@@ -1113,13 +1180,15 @@ public class {renderer_cn} extends GeoEntityRenderer<{cn}> {{
 
     @Override
     public RenderLayer getRenderType({cn} animatable, Identifier texture, VertexConsumerProvider bufferSource, float partialTick) {{
-        return {_fabric_render_layer_expr(getattr(entity, "render_layer", "solid"))};
+        return {_fabric_geo_render_layer_expr(getattr(entity, "render_layer", "solid"))};
     }}
 
     @Override
     public void preRender(MatrixStack poseStack, {cn} animatable, BakedGeoModel model, VertexConsumerProvider bufferSource, VertexConsumer buffer, boolean isReRender, float partialTick, int packedLight, int packedOverlay, float red, float green, float blue, float alpha) {{
-        poseStack.translate({getattr(entity, "render_offset_x", 0.0)}d, {getattr(entity, "render_offset_y", 0.0)}d, {getattr(entity, "render_offset_z", 0.0)}d);
-        poseStack.scale({float(getattr(entity, "render_scale_x", 1.0))}f, {float(getattr(entity, "render_scale_y", 1.0))}f, {float(getattr(entity, "render_scale_z", 1.0))}f);
+        if (!isReRender) {{
+            poseStack.translate({getattr(entity, "render_offset_x", 0.0)}d, {getattr(entity, "render_offset_y", 0.0)}d, {getattr(entity, "render_offset_z", 0.0)}d);
+            poseStack.scale({float(getattr(entity, "render_scale_x", 1.0))}f, {float(getattr(entity, "render_scale_y", 1.0))}f, {float(getattr(entity, "render_scale_z", 1.0))}f);
+        }}
         super.preRender(poseStack, animatable, model, bufferSource, buffer, isReRender, partialTick, packedLight, packedOverlay, red, green, blue, alpha);
     }}
 

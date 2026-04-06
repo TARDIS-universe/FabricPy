@@ -3,6 +3,23 @@ from pathlib import Path
 
 
 _FACE_NAMES = ("north", "south", "east", "west", "up", "down")
+_FACE_NORMALS = {
+    "north": (0, 0, -1),
+    "south": (0, 0, 1),
+    "east": (1, 0, 0),
+    "west": (-1, 0, 0),
+    "up": (0, 1, 0),
+    "down": (0, -1, 0),
+}
+_NORMAL_TO_FACE = {value: key for key, value in _FACE_NORMALS.items()}
+_MODDED_ENTITY_FACE_MAP = {
+    "north": "north",
+    "south": "south",
+    "east": "west",
+    "west": "east",
+    "up": "up",
+    "down": "down",
+}
 
 
 def _float_list(value, length: int) -> list[float] | None:
@@ -52,6 +69,67 @@ def _cube_uv_from_faces(element: dict) -> dict | None:
     return uv_map or None
 
 
+def _remap_face_keys(face_uv: dict, mapping: dict[str, str]) -> dict:
+    remapped = {}
+    for face_name, entry in face_uv.items():
+        remapped[mapping.get(face_name, face_name)] = entry
+    return remapped
+
+
+def _quarter_turns(angle: float) -> int | None:
+    rounded = round(angle / 90.0)
+    if abs(angle - (rounded * 90.0)) > 1e-6:
+        return None
+    return int(rounded)
+
+
+def _rotate_normal_x(normal: tuple[int, int, int], turns: int) -> tuple[int, int, int]:
+    x, y, z = normal
+    turns %= 4
+    for _ in range(turns):
+        y, z = -z, y
+    return (x, y, z)
+
+
+def _rotate_normal_y(normal: tuple[int, int, int], turns: int) -> tuple[int, int, int]:
+    x, y, z = normal
+    turns %= 4
+    for _ in range(turns):
+        x, z = z, -x
+    return (x, y, z)
+
+
+def _rotate_normal_z(normal: tuple[int, int, int], turns: int) -> tuple[int, int, int]:
+    x, y, z = normal
+    turns %= 4
+    for _ in range(turns):
+        x, y = -y, x
+    return (x, y, z)
+
+
+def _remap_face_uv_for_rotation(face_uv: dict, rotation: list[float] | None) -> dict:
+    if not rotation or len(rotation) != 3:
+        return face_uv
+    x_turns = _quarter_turns(rotation[0])
+    y_turns = _quarter_turns(rotation[1])
+    z_turns = _quarter_turns(rotation[2])
+    if x_turns is None or y_turns is None or z_turns is None:
+        return face_uv
+
+    remapped = {}
+    for face_name, entry in face_uv.items():
+        normal = _FACE_NORMALS.get(face_name)
+        if normal is None:
+            remapped[face_name] = entry
+            continue
+        rotated = _rotate_normal_x(normal, x_turns)
+        rotated = _rotate_normal_y(rotated, y_turns)
+        rotated = _rotate_normal_z(rotated, z_turns)
+        target_face = _NORMAL_TO_FACE.get(rotated, face_name)
+        remapped[target_face] = entry
+    return remapped
+
+
 def _convert_cube(element: dict, box_uv_default: bool) -> dict | None:
     from_pos = _float_list(element.get("from"), 3)
     to_pos = _float_list(element.get("to"), 3)
@@ -73,12 +151,12 @@ def _convert_cube(element: dict, box_uv_default: bool) -> dict | None:
     if bool(element.get("mirror_uv")) or bool(element.get("mirror")):
         cube["mirror"] = True
 
-    if bool(element.get("box_uv", box_uv_default)):
+    face_uv = _cube_uv_from_faces(element)
+    if face_uv:
+        face_uv = _remap_face_uv_for_rotation(face_uv, rotation)
+        cube["uv"] = face_uv
+    elif bool(element.get("box_uv", box_uv_default)):
         uv = _cube_uv_from_box_uv(element)
-        if uv:
-            cube["uv"] = uv
-    else:
-        uv = _cube_uv_from_faces(element)
         if uv:
             cube["uv"] = uv
 
@@ -109,10 +187,12 @@ def _merge_bounds(bounds: list[tuple[float, float, float, float, float, float]])
 
 
 def convert_bbmodel_to_geckolib_geo(model: dict, mod_id: str, default_id: str) -> dict:
+    meta = model.get("meta") if isinstance(model, dict) else None
+    model_format = meta.get("model_format", "") if isinstance(meta, dict) else ""
     resolution = model.get("resolution") if isinstance(model, dict) else None
     texture_width = int(resolution.get("width", 16)) if isinstance(resolution, dict) else 16
     texture_height = int(resolution.get("height", 16)) if isinstance(resolution, dict) else 16
-    box_uv_default = bool(model.get("meta", {}).get("box_uv")) if isinstance(model.get("meta"), dict) else False
+    box_uv_default = bool(meta.get("box_uv")) if isinstance(meta, dict) else False
 
     elements = model.get("elements") if isinstance(model, dict) else None
     outliner = model.get("outliner") if isinstance(model, dict) else None
@@ -130,6 +210,8 @@ def convert_bbmodel_to_geckolib_geo(model: dict, mod_id: str, default_id: str) -
         element_map[uuid] = element
         cube = _convert_cube(element, box_uv_default)
         if cube:
+            if model_format == "modded_entity" and isinstance(cube.get("uv"), dict):
+                cube["uv"] = _remap_face_keys(cube["uv"], _MODDED_ENTITY_FACE_MAP)
             converted_cubes[uuid] = cube
 
     bones: list[dict] = []

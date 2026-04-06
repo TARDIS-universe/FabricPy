@@ -7,3 +7,8 @@ plytm.py
 dist/playtime-forge-1.0.jar
 dist/playtime-1.0.jar
 /pickle
+/assets/tardis
+/assets/testassets
+tardis.py
+dist/tardis-forge-1.0.0.jar
+dist/tardis-1.0.0.jar
