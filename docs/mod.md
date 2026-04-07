@@ -26,8 +26,15 @@ mod = mc.Mod(
 - `version`: version string used in generated metadata and jar names
 - `description`: short loader/mod-list description
 - `authors`: list of author strings
-- `minecraft_version`: currently `1.20.1` or `1.21.1`
-- `loader`: `fabric`, `forge`, `both`, or `all`
+- `minecraft_version`: any version that has installed loader addons
+- `loader`: a discovered loader name such as `fabric` or `forge`, plus `both` and `all`
+
+The built-in addon set currently provides:
+
+- `1.20.1`: Fabric, Forge
+- `1.21.1`: Fabric, Forge
+
+See [addons.md](./addons.md) for the extension path.
 - `package`: optional Java package root; defaults to `com.generated.<mod_id>`
 - `website`: optional URL
 - `license`: optional license string

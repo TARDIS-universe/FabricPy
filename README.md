@@ -23,6 +23,7 @@ Docs:
 - `docs/creative-tabs.md`
 - `docs/keybinds.md`
 - `docs/animations.md`
+- `docs/addons.md`
 - `docs/dependencies.md`
 - `docs/interop.md`
 - `docs/demo.md`
@@ -45,10 +46,16 @@ Project source assets and data now live in:
 
 Those folders are copied into generated loader projects during compile.
 
-Supported matrix:
+Supported matrix through built-in addons:
 
 - `1.20.1`: Fabric, Forge
 - `1.21.1`: Fabric, Forge
+
+Addon system:
+
+- loader/version support now comes from addons under `fabricpy/addons/...`
+- built-in Fabric and Forge support now uses that same addon system
+- external addons can add new loaders or new version targets without editing the compiler core
 
 Content support now includes:
 
@@ -128,6 +135,14 @@ Gradle wrapper selection is loader-aware:
 - Fabric uses Gradle `8.8`
 - Forge `1.20.1` uses Gradle `8.8`
 - Forge `1.21.1` uses Gradle `9.3.0`
+
+Addon discovery helper:
+
+```python
+import fabricpy as mc
+
+print(mc.list_addons())
+```
 
 
 # For use:

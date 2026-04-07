@@ -61,6 +61,8 @@ The important mental model is:
 - `ctx.player.set_main_hand_item(item_id, count)`
 - `ctx.player.has_item(item_id)`
 - `ctx.player.count_item(item_id)`
+- `ctx.player.has_advancement(advancement_id)`
+- `ctx.player.has_advancment(advancement_id)`
 - `ctx.player.add_cooldown(item_id, ticks)`
 
 Example:
@@ -72,6 +74,17 @@ def on_join(ctx):
     ctx.player.add_effect("minecraft:speed", 15, 0)
     ctx.player.send_message("Starter kit granted")
 ```
+
+Advancement checks expect a full advancement id in `namespace:path` form:
+
+```python
+@mod.event("player_tick")
+def story_check(ctx):
+    if ctx.player.has_advancement("minecraft:story/mine_stone"):
+        ctx.player.send_action_bar("Stone Age complete")
+```
+
+`ctx.player.has_advancment(...)` is accepted as a compatibility alias for the misspelling, but `has_advancement(...)` is the preferred spelling.
 
 ## World Helpers
 

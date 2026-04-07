@@ -84,6 +84,10 @@ FABRIC_API_MAP: dict[str, str] = {
         '(player.getInventory().main.stream().anyMatch(s -> s.isOf(Registries.ITEM.get(new Identifier({0})))) || player.getOffHandStack().isOf(Registries.ITEM.get(new Identifier({0}))))',
     "ctx.player.count_item":
         '(player.getInventory().main.stream().filter(s -> s.isOf(Registries.ITEM.get(new Identifier({0})))).mapToInt(ItemStack::getCount).sum() + (player.getOffHandStack().isOf(Registries.ITEM.get(new Identifier({0}))) ? player.getOffHandStack().getCount() : 0))',
+    "ctx.player.has_advancement":
+        '(((ServerPlayerEntity)player).getServer().getAdvancementLoader().get(new Identifier({0})) != null && ((ServerPlayerEntity)player).getAdvancementTracker().getProgress(((ServerPlayerEntity)player).getServer().getAdvancementLoader().get(new Identifier({0}))).isDone())',
+    "ctx.player.has_advancment":
+        '(((ServerPlayerEntity)player).getServer().getAdvancementLoader().get(new Identifier({0})) != null && ((ServerPlayerEntity)player).getAdvancementTracker().getProgress(((ServerPlayerEntity)player).getServer().getAdvancementLoader().get(new Identifier({0}))).isDone())',
     "ctx.player.add_cooldown":
         'player.getItemCooldownManager().set(Registries.ITEM.get(new Identifier({0})), (int)({1}))',
 
@@ -355,6 +359,10 @@ FORGE_API_MAP: dict[str, str] = {
         '(player.getInventory().items.stream().anyMatch(s -> s.is(ForgeRegistries.ITEMS.getValue(new ResourceLocation({0})))) || player.getOffhandItem().is(ForgeRegistries.ITEMS.getValue(new ResourceLocation({0}))))',
     "ctx.player.count_item":
         '(player.getInventory().items.stream().filter(s -> s.is(ForgeRegistries.ITEMS.getValue(new ResourceLocation({0})))).mapToInt(ItemStack::getCount).sum() + (player.getOffhandItem().is(ForgeRegistries.ITEMS.getValue(new ResourceLocation({0}))) ? player.getOffhandItem().getCount() : 0))',
+    "ctx.player.has_advancement":
+        '(((ServerPlayer)player).getServer().getAdvancements().getAdvancement(new ResourceLocation({0})) != null && ((ServerPlayer)player).getAdvancements().getOrStartProgress(((ServerPlayer)player).getServer().getAdvancements().getAdvancement(new ResourceLocation({0}))).isDone())',
+    "ctx.player.has_advancment":
+        '(((ServerPlayer)player).getServer().getAdvancements().getAdvancement(new ResourceLocation({0})) != null && ((ServerPlayer)player).getAdvancements().getOrStartProgress(((ServerPlayer)player).getServer().getAdvancements().getAdvancement(new ResourceLocation({0}))).isDone())',
     "ctx.player.add_cooldown":
         'player.getCooldowns().addCooldown(ForgeRegistries.ITEMS.getValue(new ResourceLocation({0})), (int)({1}))',
 

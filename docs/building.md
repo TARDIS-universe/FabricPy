@@ -5,7 +5,9 @@
 That means there are always two layers to keep in mind:
 
 - your Python mod source
-- the generated Fabric/Forge projects and their normal Java/Gradle build rules
+- the generated loader projects and their normal Java/Gradle build rules
+
+Loader support now comes from addons under `fabricpy/addons/...`.
 
 ## Requirements
 
@@ -73,11 +75,12 @@ python .\my_mod.py
 
 1. validates the Python mod definition
 2. resolves target loaders from `loader` and `minecraft_version`
-3. generates loader projects in `.fabricpy_build/<modid>-fabric` and/or `.fabricpy_build/<modid>-forge`
-4. copies repo `assets/` and `data/` into generated resources
-5. runs Gradle builds in each generated project
-6. copies built jars into `dist/`
-7. emits interop metadata and dependency stub output under `.fabricpy_meta/`
+3. resolves the best loader addon for each requested loader
+4. generates loader projects in `.fabricpy_build/<modid>-<loader>`
+5. copies repo `assets/` and `data/` into generated resources
+6. runs the addon build step in each generated project
+7. copies built jars into `dist/`
+8. emits interop metadata and dependency stub output under `.fabricpy_meta/`
 
 ## Generated Output
 
@@ -97,6 +100,17 @@ Interop/compiler metadata:
 - `.fabricpy_build/<modid>-<loader>/.fabricpy_meta/symbol_index.stub.json`
 - `.fabricpy_build/<modid>-<loader>/.fabricpy_meta/symbol_index.json`
 - `.fabricpy_build/<modid>-<loader>/.fabricpy_meta/python_stubs/dep/...`
+
+## Addon-backed Loader Support
+
+Built-in loader support is now provided through addon folders inside `fabricpy/addons/...`.
+
+See [addons.md](./addons.md) for:
+
+- the addon file layout
+- the required `addon.py` fields
+- loader override priority
+- how to add custom loader/version support
 
 ## Repo Asset and Data Layout
 

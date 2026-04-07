@@ -17,6 +17,7 @@ If you are new to the repo, read in this order:
 If you are working on advanced systems, also read:
 
 - [animations.md](./animations.md)
+- [addons.md](./addons.md)
 - [dependencies.md](./dependencies.md)
 - [interop.md](./interop.md)
 - [roadmap.md](./roadmap.md)
@@ -68,4 +69,8 @@ These are copied into generated loader projects during compile. When the same pa
 - `1.20.1`: Fabric, Forge
 - `1.21.1`: Fabric, Forge
 
-`loader="both"` and `loader="all"` both currently resolve to Fabric plus Forge.
+Loader support is now addon-backed.
+
+- `loader="both"` resolves to Fabric plus Forge when those built-in addons exist for the selected Minecraft version
+- `loader="all"` resolves to every discovered loader addon for the selected Minecraft version
+- custom loader/version addons can be added under `fabricpy/addons/...`

@@ -22,10 +22,8 @@ def compile_mod(mod: "Mod", output_dir: str = "./dist", clean: bool = False):
       4. Run Gradle build(s)
       5. Copy output .jar(s) to output_dir
     """
-    from fabricpy.compiler.fabric_gen import generate_fabric_project
-    from fabricpy.compiler.forge_gen import generate_forge_project
-    from fabricpy.compiler.gradle_runner import run_build
     from fabricpy.compiler.jar_scanner import build_symbol_index_for_project
+    from fabricpy.addons import resolve_addon
 
     _validate(mod)
 
@@ -59,29 +57,23 @@ def compile_mod(mod: "Mod", output_dir: str = "./dist", clean: bool = False):
 
     results = {}
 
-    if "fabric" in loaders:
-        fabric_dir = gen_root / f"{mod.mod_id}-fabric"
-        generate_fabric_project(mod, fabric_dir)
-        success = run_build(fabric_dir, mod.minecraft_version, "fabric", clean=clean, output_dir=out)
-        results["fabric"] = success
-        if success:
-            try:
-                build_symbol_index_for_project(fabric_dir)
-                print(f"[fabricpy] Interop index written: {fabric_dir / '.fabricpy_meta' / 'symbol_index.json'}")
-            except Exception as exc:
-                print(f"[fabricpy] Warning: interop index generation failed for Fabric: {exc}")
+    for loader in loaders:
+        addon = resolve_addon("loader", loader, mod.minecraft_version)
+        if addon is None:
+            raise ValueError(
+                f"No loader addon found for loader={loader!r} minecraft_version={mod.minecraft_version!r}."
+            )
 
-    if "forge" in loaders:
-        forge_dir = gen_root / f"{mod.mod_id}-forge"
-        generate_forge_project(mod, forge_dir)
-        success = run_build(forge_dir, mod.minecraft_version, "forge", clean=clean, output_dir=out)
-        results["forge"] = success
+        project_dir = gen_root / f"{mod.mod_id}-{loader}"
+        addon.generate_project(mod, project_dir)
+        success = addon.build_project(project_dir, mod.minecraft_version, clean=clean, output_dir=out)
+        results[loader] = success
         if success:
             try:
-                build_symbol_index_for_project(forge_dir)
-                print(f"[fabricpy] Interop index written: {forge_dir / '.fabricpy_meta' / 'symbol_index.json'}")
+                build_symbol_index_for_project(project_dir)
+                print(f"[fabricpy] Interop index written: {project_dir / '.fabricpy_meta' / 'symbol_index.json'}")
             except Exception as exc:
-                print(f"[fabricpy] Warning: interop index generation failed for Forge: {exc}")
+                print(f"[fabricpy] Warning: interop index generation failed for {loader}: {exc}")
 
     print()
     print("=" * 50)
@@ -95,22 +87,19 @@ def compile_mod(mod: "Mod", output_dir: str = "./dist", clean: bool = False):
 
 
 def _resolve_loaders(loader: str, minecraft_version: str) -> list[str]:
+    from fabricpy.addons import supported_targets
+
     loader = loader.lower().strip()
 
-    supported_by_version = {
-        "1.20.1": ["fabric", "forge"],
-        "1.21.1": ["fabric", "forge"],
-    }
-    supported = supported_by_version.get(minecraft_version)
+    supported = supported_targets("loader", minecraft_version)
     if not supported:
         raise ValueError(
-            f"Unsupported minecraft_version: {minecraft_version!r}. "
-            "Use one of: '1.20.1', '1.21.1'."
+            f"No loader addons found for minecraft_version={minecraft_version!r}."
         )
 
     alias_map = {
-        "both": ["fabric", "forge"],
-        "all": ["fabric", "forge"],
+        "both": [name for name in ("fabric", "forge") if name in supported],
+        "all": list(supported),
     }
 
     if loader in alias_map:
