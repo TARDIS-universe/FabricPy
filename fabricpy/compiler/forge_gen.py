@@ -36,6 +36,7 @@ from fabricpy.compiler.api_maps import (
     FORGE_API_MAP, FORGE_EXTRA_IMPORTS,
     FORGE_EVENT_MAP,
 )
+from fabricpy.compiler.versions import FORGE_VERSIONS, is_at_least
 
 
 def to_pascal(snake: str) -> str:
@@ -469,13 +470,12 @@ def generate_forge_project(mod: "Mod", project_dir: Path):
     interop_repositories = [*_forge_repository_lines(mod), "https://repo1.maven.org/maven2/"]
     interop_dependency_lines = [_forge_dependency_line(dep, mod.minecraft_version) for dep in _deps_for_loader(mod, "forge")]
     if _uses_geckolib(mod):
-        geckolib_versions = {
-            "1.20.1": "4.4.9",
-            "1.21.1": "5.0.0",
-        }
+        version_meta = FORGE_VERSIONS.get(mod.minecraft_version)
+        if version_meta is None:
+            raise ValueError(f"Forge does not support minecraft_version={mod.minecraft_version!r} in this generator.")
         interop_repositories.insert(0, "https://dl.cloudsmith.io/public/geckolib3/geckolib/maven/")
         interop_dependency_lines = [
-            f"implementation fg.deobf('software.bernie.geckolib:geckolib-forge-{mod.minecraft_version}:{geckolib_versions[mod.minecraft_version]}')",
+            f"implementation fg.deobf('software.bernie.geckolib:geckolib-forge-{mod.minecraft_version}:{version_meta.geckolib}')",
             *interop_dependency_lines,
         ]
     write_interop_metadata(
@@ -1615,7 +1615,7 @@ import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.entity.BlockEntityTicker;
 import net.minecraft.world.level.block.entity.BlockEntityType;"""
         codec_members = ""
-        if mod.minecraft_version == "1.21.1":
+        if is_at_least(mod.minecraft_version, "1.21"):
             extra_imports += """
 import com.mojang.serialization.MapCodec;"""
             codec_members = f"""
@@ -1709,7 +1709,7 @@ def _write_single_block_entity(mod, block, block_entity_dir: Path, pkg: str, tra
     data_imports = """
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.block.Block;"""
-    if mod.minecraft_version == "1.21.1":
+    if is_at_least(mod.minecraft_version, "1.21"):
         data_imports += """
 import net.minecraft.core.HolderLookup;"""
         data_methods = """
@@ -2355,19 +2355,9 @@ def _write_resources(mod, res_root: Path):
     meta_dir = res_root / "META-INF"
     meta_dir.mkdir(parents=True, exist_ok=True)
 
-    meta_by_version = {
-        "1.20.1": {
-            "loader_version": "[47,)",
-            "forge_dep": "[47,)",
-            "pack_format": 15,
-        },
-        "1.21.1": {
-            "loader_version": "[52,)",
-            "forge_dep": "[52,)",
-            "pack_format": 34,
-        },
-    }
-    meta = meta_by_version.get(mod.minecraft_version, meta_by_version["1.20.1"])
+    meta = FORGE_VERSIONS.get(mod.minecraft_version)
+    if meta is None:
+        raise ValueError(f"Forge does not support minecraft_version={mod.minecraft_version!r} in this generator.")
 
     extra_meta_deps = []
     for dep in _deps_for_loader(mod, "forge"):
@@ -2385,7 +2375,7 @@ def _write_resources(mod, res_root: Path):
 [[dependencies.{mod.mod_id}]]
     modId="forge"
     mandatory=true
-    versionRange="{meta["forge_dep"]}"
+    versionRange="{meta.forge_dep}"
     ordering="NONE"
     side="BOTH"
 
@@ -2400,7 +2390,7 @@ def _write_resources(mod, res_root: Path):
 
     mods_toml = f"""\
 modLoader="javafml"
-loaderVersion="{meta["loader_version"]}"
+loaderVersion="{meta.loader_version}"
 license="{mod.license}"
 
 [[mods]]
@@ -2414,7 +2404,7 @@ description="{mod.description}"
 
     # pack.mcmeta
     _write_text(res_root / "pack.mcmeta", json.dumps({
-        "pack": {"pack_format": meta["pack_format"], "description": f"{mod.name} resources"}
+        "pack": {"pack_format": meta.pack_format, "description": f"{mod.name} resources"}
     }, indent=2))
 
     # lang
@@ -2581,41 +2571,25 @@ description="{mod.description}"
 def _write_gradle_files(mod, project_dir: Path):
     mc = mod.minecraft_version
     use_geckolib = _uses_geckolib(mod)
-    version_map = {
-        "1.20.1": {
-            "forge": "47.4.18",
-            "java": 17,
-            "plugin": "6.0.51",
-            "settings_plugin": "0.8.0",
-            "geckolib": "4.4.9",
-        },
-        "1.21.1": {
-            "forge": "52.1.14",
-            "java": 21,
-            "plugin": "[7.0.3,8)",
-            "settings_plugin": "1.0.0",
-            "geckolib": "5.0.0",
-        },
-    }
-    if mc not in version_map:
+    v = FORGE_VERSIONS.get(mc)
+    if v is None:
         raise ValueError(f"Forge does not support minecraft_version={mc!r} in this generator.")
-    v = version_map[mc]
     extra_repos = _forge_repository_lines(mod)
     extra_deps = [_forge_dependency_line(dep, mc) for dep in _deps_for_loader(mod, "forge")]
 
-    if mc == "1.21.1":
+    if is_at_least(mc, "1.21"):
         build_gradle = f"""\
 plugins {{
     id 'java'
     id 'idea'
     id 'eclipse'
-    id 'net.minecraftforge.gradle' version '{v["plugin"]}'
+    id 'net.minecraftforge.gradle' version '{v.plugin}'
 }}
 
 version = "{mod.version}"
 group = "{mod.package}"
 
-java.toolchain.languageVersion = JavaLanguageVersion.of({v['java']})
+java.toolchain.languageVersion = JavaLanguageVersion.of({v.java})
 
 sourceSets.main.resources {{ srcDir 'src/generated/resources' }}
 
@@ -2653,8 +2627,8 @@ repositories {{
 }}
 
 dependencies {{
-    implementation minecraft.dependency('net.minecraftforge:forge:{mc}-{v["forge"]}')
-    {"implementation fg.deobf('software.bernie.geckolib:geckolib-forge-" + mc + ":" + v["geckolib"] + "')" if use_geckolib else ""}
+    implementation minecraft.dependency('net.minecraftforge:forge:{mc}-{v.forge}')
+    {"implementation fg.deobf('software.bernie.geckolib:geckolib-forge-" + mc + ":" + v.geckolib + "')" if use_geckolib else ""}
 {chr(10).join(extra_deps)}
 }}
 
@@ -2664,7 +2638,7 @@ tasks.withType(JavaCompile).configureEach {{
 """
         settings_gradle = f"""\
 plugins {{
-    id 'org.gradle.toolchains.foojay-resolver-convention' version '{v["settings_plugin"]}'
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '{v.settings_plugin}'
 }}
 
 rootProject.name = "{mod.mod_id}-forge"
@@ -2686,7 +2660,7 @@ buildscript {{
         mavenCentral()
     }}
     dependencies {{
-        classpath 'net.minecraftforge.gradle:ForgeGradle:{v["plugin"]}'
+            classpath 'net.minecraftforge.gradle:ForgeGradle:{v.plugin}'
     }}
 }}
 
@@ -2697,7 +2671,7 @@ version = "{mod.version}"
 group = "{mod.package}"
 
 java {{
-    toolchain.languageVersion = JavaLanguageVersion.of({v['java']})
+    toolchain.languageVersion = JavaLanguageVersion.of({v.java})
 }}
 
 minecraft {{
@@ -2732,8 +2706,8 @@ repositories {{
 }}
 
 dependencies {{
-    minecraft 'net.minecraftforge:forge:{mc}-{v["forge"]}'
-    {"implementation fg.deobf('software.bernie.geckolib:geckolib-forge-" + mc + ":" + v["geckolib"] + "')" if use_geckolib else ""}
+    minecraft 'net.minecraftforge:forge:{mc}-{v.forge}'
+    {"implementation fg.deobf('software.bernie.geckolib:geckolib-forge-" + mc + ":" + v.geckolib + "')" if use_geckolib else ""}
 {chr(10).join(extra_deps)}
 }}
 

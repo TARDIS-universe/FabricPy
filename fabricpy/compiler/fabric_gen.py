@@ -37,6 +37,7 @@ from fabricpy.compiler.api_maps import (
     FABRIC_API_MAP, FABRIC_EXTRA_IMPORTS,
     FABRIC_EVENT_MAP,
 )
+from fabricpy.compiler.versions import FABRIC_VERSIONS, is_at_least
 
 
 def to_pascal(snake: str) -> str:
@@ -266,7 +267,7 @@ def _copy_tree_if_exists(src: Path, dest: Path):
 
 
 def _fabric_api_map_for_version(minecraft_version: str) -> dict[str, str]:
-    if minecraft_version == "1.21.1":
+    if is_at_least(minecraft_version, "1.21"):
         return {
             key: value.replace("new Identifier(", "Identifier.of(")
             for key, value in FABRIC_API_MAP.items()
@@ -306,7 +307,7 @@ def _fabric_api_map_for_project(minecraft_version: str, pkg: str) -> dict[str, s
 
 
 def _id_ctor(mod: "Mod", namespace_expr: str, path_expr: str) -> str:
-    if mod.minecraft_version == "1.21.1":
+    if is_at_least(mod.minecraft_version, "1.21"):
         return f"Identifier.of({namespace_expr}, {path_expr})"
     return f"new Identifier({namespace_expr}, {path_expr})"
 
@@ -488,13 +489,12 @@ def generate_fabric_project(mod: "Mod", project_dir: Path):
     interop_repositories = ["https://maven.fabricmc.net/", *_fabric_repository_lines(mod), "https://repo1.maven.org/maven2/"]
     interop_dependency_lines = _fabric_dependency_lines(mod)
     if _uses_geckolib(mod):
-        geckolib_versions = {
-            "1.20.1": "4.4.9",
-            "1.21.1": "5.0.0",
-        }
+        version_meta = FABRIC_VERSIONS.get(mod.minecraft_version)
+        if version_meta is None:
+            raise ValueError(f"Fabric does not support minecraft_version={mod.minecraft_version!r} in this generator.")
         interop_repositories.insert(1, "https://dl.cloudsmith.io/public/geckolib3/geckolib/maven/")
         interop_dependency_lines = [
-            f'modImplementation "software.bernie.geckolib:geckolib-fabric-{mod.minecraft_version}:{geckolib_versions[mod.minecraft_version]}"',
+            f'modImplementation "software.bernie.geckolib:geckolib-fabric-{mod.minecraft_version}:{version_meta.geckolib}"',
             *interop_dependency_lines,
         ]
     write_interop_metadata(
@@ -1663,7 +1663,7 @@ import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.block.entity.BlockEntityTicker;
 import net.minecraft.block.entity.BlockEntityType;"""
         codec_members = ""
-        if mod.minecraft_version == "1.21.1":
+        if is_at_least(mod.minecraft_version, "1.21"):
             extra_imports += """
 import com.mojang.serialization.MapCodec;"""
             codec_members = f"""
@@ -1760,7 +1760,7 @@ def _write_single_block_entity(mod, block, block_entity_dir: Path, pkg: str, tra
     data_imports = """
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.block.Block;"""
-    if mod.minecraft_version == "1.21.1":
+    if is_at_least(mod.minecraft_version, "1.21"):
         data_imports += """
 import net.minecraft.registry.RegistryWrapper;"""
         data_methods = """
@@ -2063,7 +2063,7 @@ def _write_single_item(mod, item, item_dir: Path, pkg: str, transpiler: JavaTran
     if item.food_hunger > 0:
         food_import = (
             "import net.minecraft.component.type.FoodComponent;"
-            if mod.minecraft_version == "1.21.1"
+            if is_at_least(mod.minecraft_version, "1.21")
             else "import net.minecraft.item.FoodComponent;"
         )
 
@@ -2509,10 +2509,10 @@ def _write_resources(mod: "Mod", res_root: Path, pkg: str):
         "environment": "*",
         "entrypoints": {"main": [main_class]},
         "depends": {
-            "fabricloader": ">=0.14.22",
+            "fabricloader": f">={FABRIC_VERSIONS[mod.minecraft_version].fabric_loader}",
             "fabric-api": "*",
             "minecraft": f"~{mod.minecraft_version}",
-            "java": ">=17",
+            "java": f">={FABRIC_VERSIONS[mod.minecraft_version].java}",
         },
     }
     for dep in _deps_for_loader(mod, "fabric"):
@@ -2532,7 +2532,7 @@ def _write_resources(mod: "Mod", res_root: Path, pkg: str):
             "required": True,
             "minVersion": "0.8",
             "package": mixin_pkg,
-            "compatibilityLevel": "JAVA_17",
+            "compatibilityLevel": f"JAVA_{FABRIC_VERSIONS[mod.minecraft_version].java}",
             "mixins": mixin_classes,
             "client": [],
             "injectors": {"defaultRequire": 1},
@@ -2703,7 +2703,7 @@ def _write_resources(mod: "Mod", res_root: Path, pkg: str):
     # pack.mcmeta
     _write_text(res_root / "pack.mcmeta", json.dumps({
         "pack": {
-            "pack_format": 15,
+            "pack_format": FABRIC_VERSIONS[mod.minecraft_version].pack_format,
             "description": f"{mod.name} resources",
         }
     }, indent=2))
@@ -2716,27 +2716,9 @@ def _write_resources(mod: "Mod", res_root: Path, pkg: str):
 def _write_gradle_files(mod: "Mod", project_dir: Path):
     mc = mod.minecraft_version
     use_geckolib = _uses_geckolib(mod)
-    version_map = {
-        "1.20.1": {
-            "loom": "1.6-SNAPSHOT",
-            "fabric_loader": "0.14.22",
-            "fabric_api": "0.91.1+1.20.1",
-            "yarn": "1.20.1+build.10",
-            "java": 17,
-            "geckolib": "4.4.9",
-        },
-        "1.21.1": {
-            "loom": "1.7-SNAPSHOT",
-            "fabric_loader": "0.16.14",
-            "fabric_api": "0.116.9+1.21.1",
-            "yarn": "1.21.1+build.3",
-            "java": 21,
-            "geckolib": "5.0.0",
-        },
-    }
-    if mc not in version_map:
+    v = FABRIC_VERSIONS.get(mc)
+    if v is None:
         raise ValueError(f"Fabric does not support minecraft_version={mc!r} in this generator.")
-    v = version_map[mc]
     main_class = to_pascal(mod.mod_id)
     extra_repos = _fabric_repository_lines(mod)
     extra_deps = _fabric_dependency_lines(mod)
@@ -2744,7 +2726,7 @@ def _write_gradle_files(mod: "Mod", project_dir: Path):
     # build.gradle
     build_gradle = f"""\
 plugins {{
-    id 'fabric-loom' version '{v["loom"]}'
+    id 'fabric-loom' version '{v.loom}'
     id 'maven-publish'
 }}
 
@@ -2764,10 +2746,10 @@ repositories {{
 
 dependencies {{
     minecraft "com.mojang:minecraft:{mc}"
-    mappings "net.fabricmc:yarn:{v['yarn']}:v2"
-    modImplementation "net.fabricmc:fabric-loader:{v['fabric_loader']}"
-    modImplementation "net.fabricmc.fabric-api:fabric-api:{v['fabric_api']}"
-    {"modImplementation \"software.bernie.geckolib:geckolib-fabric-" + mc + ":" + v["geckolib"] + "\"" if use_geckolib else ""}
+    mappings "net.fabricmc:yarn:{v.yarn}:v2"
+    modImplementation "net.fabricmc:fabric-loader:{v.fabric_loader}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:{v.fabric_api}"
+    {"modImplementation \"software.bernie.geckolib:geckolib-fabric-" + mc + ":" + v.geckolib + "\"" if use_geckolib else ""}
 {chr(10).join(extra_deps)}
 }}
 
@@ -2780,12 +2762,12 @@ processResources {{
 }}
 
 tasks.withType(JavaCompile).configureEach {{
-    it.options.release = {v['java']}
+    it.options.release = {v.java}
 }}
 
 java {{
     withSourcesJar()
-    toolchain.languageVersion = JavaLanguageVersion.of({v['java']})
+    toolchain.languageVersion = JavaLanguageVersion.of({v.java})
 }}
 
 jar {{

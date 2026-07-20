@@ -66,11 +66,14 @@ These are copied into generated loader projects during compile. When the same pa
 
 ## Supported Matrix
 
-- `1.20.1`: Fabric, Forge
-- `1.21.1`: Fabric, Forge
+- `1.20.1`: Fabric, Forge, Quilt
+- `1.21`: Fabric
+- `1.21.1`: Fabric, Forge, NeoForge
+- `1.21.2` through `1.21.8`: Fabric
 
 Loader support is now addon-backed.
 
 - `loader="both"` resolves to Fabric plus Forge when those built-in addons exist for the selected Minecraft version
+- `loader="all"` resolves to every built-in or external addon available for the selected Minecraft version
 - `loader="all"` resolves to every discovered loader addon for the selected Minecraft version
 - custom loader/version addons can be added under `fabricpy/addons/...`

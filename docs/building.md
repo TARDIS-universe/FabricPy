@@ -13,7 +13,7 @@ Loader support now comes from addons under `fabricpy/addons/...`.
 
 - Python `3.10+`
 - Java `17` for Minecraft `1.20.1`
-- Java `21` for Minecraft `1.21.1`
+- Java `21` for Minecraft `1.21+`
 - Gradle available for the first wrapper bootstrap, or an existing wrapper jar that can be reused
 
 ## JDK Selection
@@ -23,7 +23,7 @@ Loader support now comes from addons under `fabricpy/addons/...`.
 Version rules:
 
 - Minecraft `1.20.1` prefers Java `17`
-- Minecraft `1.21.1` prefers Java `21`
+- Minecraft `1.21+` prefers Java `21`
 
 Discovery order:
 
@@ -43,9 +43,9 @@ Important note:
 Gradle wrapper selection is automatic per loader/version combination:
 
 - Fabric `1.20.1`: Gradle `8.8`
-- Fabric `1.21.1`: Gradle `8.8`
+- Fabric `1.21+`: Gradle `8.8`
 - Forge `1.20.1`: Gradle `8.8`
-- Forge `1.21.1`: Gradle `9.3.0`
+- Forge and NeoForge `1.21+`: Gradle `9.3.0`
 
 ## Basic Compile Flow
 
@@ -136,7 +136,7 @@ Recipes, advancements, dimensions, and structures should live under:
 ### Wrong Java version
 
 - Java 17 installed for `1.20.1`
-- Java 21 installed for `1.21.1`
+- Java 21 installed for `1.21+`
 - `JAVA_HOME` is not forcing the wrong JDK globally
 
 ### Wrong model or texture in-game

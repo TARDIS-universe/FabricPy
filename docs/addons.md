@@ -2,7 +2,7 @@
 
 `fabricpy` addons let you extend the compiler without editing the core compile entrypoint.
 
-Right now the addon system is used for loader and version support. That means the built-in Fabric and Forge targets are no longer special-cased in the compiler. They are discovered the same way external addons are discovered.
+Right now the addon system is used for loader and version support. That means the built-in Fabric, Forge, Quilt, and NeoForge targets are no longer special-cased in the compiler. They are discovered the same way external addons are discovered.
 
 This page is the authoring guide for addon developers.
 
@@ -14,15 +14,15 @@ An addon declares:
 
 - what kind of addon it is
 - what target it handles
-- what Minecraft version it supports
+- what Minecraft version or versions it supports
 - how to generate a project for that target
 - optionally how to build that generated project
 
 For loader addons:
 
 - `kind` is `loader`
-- `target` is the loader name, such as `fabric`, `forge`, or `quilt`
-- `minecraft_version` is something like `1.20.1`
+- `target` is the loader name, such as `fabric`, `forge`, `neoforge`, or `quilt`
+- `minecraft_version` is something like `1.20.1`, or `MINECRAFT_VERSIONS` is a list of supported versions
 
 ## Folder Layout
 
@@ -419,9 +419,10 @@ That is enough for a community addon to be maintainable.
 
 The current built-in loader addons are:
 
-- Fabric `1.20.1`
-- Fabric `1.21.1`
+- Fabric `1.20.1`, `1.21`, and `1.21.1` through `1.21.8`
 - Forge `1.20.1`
 - Forge `1.21.1`
+- Quilt `1.20.1`
+- NeoForge `1.21.1`
 
 They live in the same folder structure external addons use, so they are the reference implementation for addon authors.

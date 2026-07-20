@@ -1,6 +1,6 @@
 # Keybinds
 
-`fabricpy` supports client-side keybind definitions for Fabric and Forge.
+`fabricpy` supports client-side keybind definitions for supported loaders.
 
 Define a keybind from Python, then attach an `on_press` handler to it.
 

@@ -54,25 +54,33 @@ def _load_module(module_path: Path) -> ModuleType:
     return module
 
 
-def _addon_from_module(module: ModuleType, module_path: Path) -> Addon | None:
+def _addons_from_module(module: ModuleType, module_path: Path) -> list[Addon]:
     kind = str(getattr(module, "ADDON_KIND", "")).strip().lower()
     target = str(getattr(module, "ADDON_TARGET", getattr(module, "LOADER", ""))).strip().lower()
-    minecraft_version = str(getattr(module, "MINECRAFT_VERSION", "")).strip()
     name = str(getattr(module, "ADDON_NAME", module_path.parent.name)).strip() or module_path.parent.name
     priority = int(getattr(module, "ADDON_PRIORITY", 0))
 
-    if not kind or not target or not minecraft_version:
-        return None
+    raw_versions = getattr(module, "MINECRAFT_VERSIONS", None)
+    if raw_versions is None:
+        single_version = str(getattr(module, "MINECRAFT_VERSION", "")).strip()
+        raw_versions = [single_version] if single_version else []
 
-    return Addon(
-        kind=kind,
-        target=target,
-        minecraft_version=minecraft_version,
-        name=name,
-        module=module,
-        path=module_path.parent,
-        priority=priority,
-    )
+    versions = [str(version).strip() for version in raw_versions if str(version).strip()]
+    if not kind or not target or not versions:
+        return []
+
+    return [
+        Addon(
+            kind=kind,
+            target=target,
+            minecraft_version=minecraft_version,
+            name=name,
+            module=module,
+            path=module_path.parent,
+            priority=priority,
+        )
+        for minecraft_version in versions
+    ]
 
 
 def discover_addons() -> list[Addon]:
@@ -84,9 +92,7 @@ def discover_addons() -> list[Addon]:
     for module_path in root.rglob("addon.py"):
         try:
             module = _load_module(module_path)
-            addon = _addon_from_module(module, module_path)
-            if addon is not None:
-                found.append(addon)
+            found.extend(_addons_from_module(module, module_path))
         except Exception:
             continue
 

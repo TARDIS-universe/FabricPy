@@ -15,7 +15,13 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
+
+from fabricpy.compiler.versions import (
+    required_gradle_version as _version_required_gradle_version,
+    required_java_major as _version_required_java_major,
+)
 
 DEFAULT_GRADLE_VERSION = "8.8"
 
@@ -46,17 +52,11 @@ def _gradle_version(gradle_bin: str, env: dict[str, str]) -> tuple[int, ...] | N
     return _parse_version_tuple(match.group(1))
 
 def _required_java_major(minecraft_version: str) -> int:
-    version_map = {
-        "1.20.1": 17,
-        "1.21.1": 21,
-    }
-    return version_map.get(minecraft_version, 17)
+    return _version_required_java_major(minecraft_version)
 
 
 def _required_gradle_version(loader: str, minecraft_version: str) -> str:
-    if loader == "forge" and minecraft_version == "1.21.1":
-        return "9.3.0"
-    return DEFAULT_GRADLE_VERSION
+    return _version_required_gradle_version(loader, minecraft_version)
 
 
 def _java_major_version(java_exe: Path) -> int | None:
@@ -83,6 +83,21 @@ def _iter_java_candidates() -> list[Path]:
     java_home = os.environ.get("JAVA_HOME")
     if java_home:
         candidates.append(Path(java_home) / "bin" / ("java.exe" if sys.platform == "win32" else "java"))
+
+    if sys.platform == "darwin":
+        java_home_tool = Path("/usr/libexec/java_home")
+        if java_home_tool.exists():
+            try:
+                result = subprocess.run(
+                    [str(java_home_tool)],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    candidates.append(Path(result.stdout.strip()) / "bin" / "java")
+            except subprocess.TimeoutExpired:
+                pass
 
     for env_name, env_value in os.environ.items():
         if env_name.upper().startswith("JDK") and env_name.upper().endswith("_HOME") and env_value:
@@ -121,6 +136,22 @@ def _find_java_executable(required_major: int) -> str | None:
     """Find a Java executable matching the required major version."""
     candidates = _iter_java_candidates()
 
+    if sys.platform == "darwin":
+        java_home_tool = Path("/usr/libexec/java_home")
+        if java_home_tool.exists():
+            for version_arg in (str(required_major), f"{required_major}+"):
+                try:
+                    result = subprocess.run(
+                        [str(java_home_tool), "-v", version_arg],
+                        capture_output=True,
+                        text=True,
+                        timeout=5,
+                    )
+                except subprocess.TimeoutExpired:
+                    continue
+                if result.returncode == 0 and result.stdout.strip():
+                    candidates.insert(0, Path(result.stdout.strip()) / "bin" / "java")
+
     seen: set[str] = set()
     exact_matches: list[tuple[int, str]] = []
     fallback_matches: list[tuple[int, str]] = []
@@ -151,6 +182,60 @@ def _find_java_executable(required_major: int) -> str | None:
     return None
 
 
+def _max_java_major_for_gradle(gradle_version: str) -> int:
+    version = _parse_version_tuple(gradle_version)
+    if version < (9, 0):
+        return 22
+    if version < (9, 6):
+        return 25
+    return 26
+
+
+def _find_java_executable_in_range(min_major: int, max_major: int) -> str | None:
+    candidates = []
+    seen: set[str] = set()
+    if sys.platform == "darwin":
+        java_home_tool = Path("/usr/libexec/java_home")
+        if java_home_tool.exists():
+            for version_arg in (str(min_major), f"{min_major}+"):
+                try:
+                    result = subprocess.run(
+                        [str(java_home_tool), "-v", version_arg],
+                        capture_output=True,
+                        text=True,
+                        timeout=5,
+                    )
+                except subprocess.TimeoutExpired:
+                    continue
+                if result.returncode == 0 and result.stdout.strip():
+                    candidate = Path(result.stdout.strip()) / "bin" / "java"
+                    major = _java_major_version(candidate)
+                    if major is not None and min_major <= major <= max_major:
+                        candidates.append((major, str(candidate)))
+
+    for candidate in _iter_java_candidates():
+        try:
+            resolved = candidate.resolve()
+        except FileNotFoundError:
+            continue
+        if str(resolved) in seen or not resolved.exists():
+            continue
+        seen.add(str(resolved))
+        major = _java_major_version(resolved)
+        if major is not None and min_major <= major <= max_major:
+            candidates.append((major, str(resolved)))
+    if candidates:
+        candidates.sort(key=lambda item: item[0])
+        return candidates[0][1]
+    return None
+
+
+def _find_gradle_java_executable(gradle_version: str, min_major: int = 17) -> str | None:
+    """Find a JVM suitable for running Gradle itself."""
+    max_major = _max_java_major_for_gradle(gradle_version)
+    return _find_java_executable_in_range(min_major, max_major)
+
+
 def _build_env(java_exe: str | None = None) -> dict[str, str]:
     """Build an environment that prefers the selected Java executable."""
     env = os.environ.copy()
@@ -159,6 +244,20 @@ def _build_env(java_exe: str | None = None) -> dict[str, str]:
 
     java_bin = str(Path(java_exe).parent)
     java_home = str(Path(java_exe).parent.parent)
+    if sys.platform == "darwin":
+        try:
+            resolved = Path(java_exe).resolve()
+            if resolved == Path("/usr/bin/java"):
+                result = subprocess.run(
+                    ["/usr/libexec/java_home"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    java_home = result.stdout.strip()
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
     path_parts = [java_bin] + [
         part for part in env.get("PATH", "").split(os.pathsep)
         if part and part != java_bin
@@ -206,7 +305,7 @@ def _setup_gradle_wrapper(project_dir: Path, env: dict[str, str], gradle_version
 
     Strategy:
     1. If `gradle` is on PATH, run `gradle wrapper --gradle-version <required>`
-    2. Otherwise, try to copy wrapper from another project.
+    2. Otherwise, generate scripts and report the missing wrapper jar.
     """
     wrapper_script = project_dir / ("gradlew.bat" if sys.platform == "win32" else "gradlew")
     wrapper_props = project_dir / "gradle" / "wrapper" / "gradle-wrapper.properties"
@@ -223,37 +322,41 @@ def _setup_gradle_wrapper(project_dir: Path, env: dict[str, str], gradle_version
 
     gradle_bin = shutil.which("gradle", path=env.get("PATH"))
     if gradle_bin:
-        detected_version = _gradle_version(gradle_bin, env)
-        required_version = _parse_version_tuple(gradle_version)
-        if detected_version is not None and detected_version >= required_version:
-            print("[fabricpy] Setting up Gradle wrapper via system Gradle...")
+        print("[fabricpy] Setting up Gradle wrapper via system Gradle...")
+        wrapper_tmp = Path(tempfile.mkdtemp(prefix="fabricpy-gradle-wrapper-"))
+        (wrapper_tmp / "settings.gradle").write_text('rootProject.name = "fabricpy-wrapper"\n', encoding="utf-8")
+        try:
             result = subprocess.run(
-                [gradle_bin, "wrapper", "--gradle-version", gradle_version],
-                cwd=project_dir,
-                capture_output=True,
-                text=True,
+                [gradle_bin, "--no-daemon", "wrapper", "--gradle-version", gradle_version],
+                cwd=wrapper_tmp,
                 env=env,
+                timeout=180,
             )
-            if result.returncode == 0:
-                print("[fabricpy] Gradle wrapper ready.")
-                return True
-            print(f"[fabricpy] gradle wrapper failed:\n{result.stderr}")
-        else:
-            print(
-                f"[fabricpy] Skipping system Gradle bootstrap because it is too old for wrapper {gradle_version}."
-            )
+        except subprocess.TimeoutExpired:
+            print("[fabricpy] gradle wrapper timed out after 3 minutes.")
+            result = None
+        if result is not None and result.returncode == 0:
+            for name in ("gradlew", "gradlew.bat"):
+                src = wrapper_tmp / name
+                if src.exists():
+                    shutil.copy2(src, project_dir / name)
+            wrapper_src = wrapper_tmp / "gradle" / "wrapper"
+            wrapper_dest = project_dir / "gradle" / "wrapper"
+            if wrapper_dest.exists():
+                shutil.rmtree(wrapper_dest)
+            shutil.copytree(wrapper_src, wrapper_dest)
+            gradlew = project_dir / "gradlew"
+            if gradlew.exists():
+                gradlew.chmod(0o755)
+            print("[fabricpy] Gradle wrapper ready.")
+            shutil.rmtree(wrapper_tmp, ignore_errors=True)
+            return True
+        if result is not None:
+            print(f"[fabricpy] gradle wrapper failed with exit code {result.returncode}.")
+        shutil.rmtree(wrapper_tmp, ignore_errors=True)
 
     print("[fabricpy] Generating minimal Gradle wrapper scripts...")
     _write_wrapper_scripts(project_dir, gradle_version)
-
-    jar_path = project_dir / "gradle" / "wrapper" / "gradle-wrapper.jar"
-    jar_path.parent.mkdir(parents=True, exist_ok=True)
-
-    jar_candidates = list(Path.home().rglob("gradle-wrapper.jar"))
-    if jar_candidates:
-        shutil.copy2(jar_candidates[0], jar_path)
-        print(f"[fabricpy] Copied gradle-wrapper.jar from {jar_candidates[0]}")
-        return True
 
     print("[fabricpy] Could not find gradle-wrapper.jar.")
     print("[fabricpy] Please install Gradle (https://gradle.org/install/) and run:")
@@ -281,14 +384,14 @@ def _write_wrapper_scripts(project_dir: Path, gradle_version: str):
 # Gradle start up script for UN*X
 # Generated by fabricpy
 ##############################################################################
-APP_HOME=$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")
+APP_HOME=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 if [ -n "$JAVA_HOME" ]; then
   exec "$JAVA_HOME/bin/java" -jar "$APP_HOME/gradle/wrapper/gradle-wrapper.jar" "$@"
 fi
 exec java -jar "$APP_HOME/gradle/wrapper/gradle-wrapper.jar" "$@"
 """
     gradlew_path = project_dir / "gradlew"
-    gradlew_path.write_text(gradlew)
+    gradlew_path.write_text(gradlew, encoding="utf-8")
     gradlew_path.chmod(0o755)
 
     (project_dir / "gradlew.bat").write_text(
@@ -298,7 +401,8 @@ exec java -jar "$APP_HOME/gradle/wrapper/gradle-wrapper.jar" "$@"
         "  \"%JAVA_HOME%\\bin\\java.exe\" -jar \"%~dp0gradle\\wrapper\\gradle-wrapper.jar\" %*\r\n"
         ") else (\r\n"
         "  java -jar \"%~dp0gradle\\wrapper\\gradle-wrapper.jar\" %*\r\n"
-        ")\r\n"
+        ")\r\n",
+        encoding="utf-8",
     )
 
 
@@ -308,12 +412,18 @@ def run_build(project_dir: Path, minecraft_version: str, loader: str, clean: boo
 
     Returns True if build succeeded.
     """
-    java_exe = _check_java(minecraft_version)
+    gradle_version = _required_gradle_version(loader, minecraft_version)
+    required_major = _required_java_major(minecraft_version)
+    java_exe = _find_gradle_java_executable(gradle_version, min_major=required_major)
     if not java_exe:
+        max_major = _max_java_major_for_gradle(gradle_version)
+        print(
+            f"[fabricpy] Error: No Java runtime compatible with Gradle {gradle_version} was found. "
+            f"Minecraft {minecraft_version} targets Java {required_major}; install a JDK from {required_major} to {max_major} and retry."
+        )
         return False
 
     env = _build_env(java_exe)
-    gradle_version = _required_gradle_version(loader, minecraft_version)
 
     if not _setup_gradle_wrapper(project_dir, env, gradle_version):
         print("[fabricpy] Build skipped - Gradle wrapper not set up.")

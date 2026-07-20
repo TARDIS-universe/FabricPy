@@ -1,6 +1,6 @@
 # Creative Tabs
 
-`fabricpy` can generate custom creative tabs for Fabric and Forge.
+`fabricpy` can generate custom creative tabs for supported loaders.
 
 Use `mod.creative_tab(...)` to create the tab, then add items into it through the tab builder.
 

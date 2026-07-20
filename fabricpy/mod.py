@@ -28,6 +28,7 @@ Usage:
 """
 
 import inspect
+import re
 from typing import List, Optional, Type
 
 
@@ -253,18 +254,18 @@ class Mod:
             website:            Optional homepage URL
             license:            License identifier (default: "MIT")
         """
-        if not mod_id or not mod_id.isidentifier():
-            raise ValueError(f"mod_id must be a valid identifier, got: {mod_id!r}")
-        if " " in mod_id or mod_id != mod_id.lower():
-            raise ValueError(f"mod_id must be lowercase with no spaces, got: {mod_id!r}")
+        if not mod_id or not re.fullmatch(r"[a-z][a-z0-9_]*", mod_id):
+            raise ValueError(
+                "mod_id must start with a lowercase letter and contain only lowercase letters, digits, and underscores"
+            )
 
         self.mod_id = mod_id
         self.name = name
         self.version = version
         self.description = description
         self.authors = authors or []
-        self.minecraft_version = minecraft_version
-        self.loader = loader.lower()
+        self.minecraft_version = minecraft_version.strip()
+        self.loader = loader.lower().strip()
         self.package = package or f"com.generated.{mod_id}"
         self.website = website
         self.license = license

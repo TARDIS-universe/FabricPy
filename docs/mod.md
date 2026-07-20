@@ -31,8 +31,10 @@ mod = mc.Mod(
 
 The built-in addon set currently provides:
 
-- `1.20.1`: Fabric, Forge
-- `1.21.1`: Fabric, Forge
+- `1.20.1`: Fabric, Forge, Quilt
+- `1.21`: Fabric
+- `1.21.1`: Fabric, Forge, NeoForge
+- `1.21.2` through `1.21.8`: Fabric
 
 See [addons.md](./addons.md) for the extension path.
 - `package`: optional Java package root; defaults to `com.generated.<mod_id>`

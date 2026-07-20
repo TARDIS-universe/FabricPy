@@ -6,6 +6,7 @@ then invokes Gradle to produce .jar files.
 """
 
 from pathlib import Path
+import re
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -125,21 +126,55 @@ def _resolve_loaders(loader: str, minecraft_version: str) -> list[str]:
 
 def _validate(mod: "Mod"):
     """Basic sanity checks before compiling."""
+    from fabricpy.addons import supported_targets
+
     errors = []
 
     if not mod.mod_id:
         errors.append("mod_id is required")
+    elif not re.fullmatch(r"[a-z][a-z0-9_]*", mod.mod_id):
+        errors.append("mod_id must start with a lowercase letter and contain only lowercase letters, digits, and underscores")
     if not mod.name:
         errors.append("name is required")
+
+    try:
+        loaders = _resolve_loaders(mod.loader, mod.minecraft_version)
+    except ValueError as exc:
+        errors.append(str(exc))
+        loaders = []
+
+    supported = supported_targets("loader", mod.minecraft_version)
+    if loaders and not supported:
+        errors.append(f"No loader addons found for minecraft_version={mod.minecraft_version!r}")
+
+    block_ids = set()
     for block in mod._blocks:
         if not block.block_id:
             errors.append(f"{block.__name__} is missing block_id")
+        elif block.block_id in block_ids:
+            errors.append(f"duplicate block_id: {block.block_id}")
+        else:
+            block_ids.add(block.block_id)
+        if "on_tick" in block.get_hooks() and not (block.has_block_entity or getattr(block, "uses_block_data", False)):
+            errors.append(f"{block.__name__} uses @on_tick but has_block_entity is not enabled")
+
+    item_ids = set()
     for item in mod._items:
         if not item.item_id:
             errors.append(f"{item.__name__} is missing item_id")
+        elif item.item_id in item_ids:
+            errors.append(f"duplicate item_id: {item.item_id}")
+        else:
+            item_ids.add(item.item_id)
+
+    entity_ids = set()
     for entity in mod._entities:
         if not entity.entity_id:
             errors.append(f"{entity.__name__} is missing entity_id")
+        elif entity.entity_id in entity_ids:
+            errors.append(f"duplicate entity_id: {entity.entity_id}")
+        else:
+            entity_ids.add(entity.entity_id)
     for mx in mod._mixins:
         if not mx.target_class:
             errors.append(f"{mx.__name__} is missing target_class")
